@@ -157,6 +157,7 @@ If USE-CONFIG is t, run jj without suppressing the user config."
                     commit-id-short "commit_id.short(8)"
                     commit-id-shortest "commit_id.shortest()"
                     empty "empty"
+                    branches "branches"
                     description "description")))
     (-> (map-to-escaped-string template)
         (jj-show-w/template rev)
@@ -177,6 +178,10 @@ If USE-CONFIG is t, run jj without suppressing the user config."
          (change-id-shortest (map-elt data 'change-id-shortest))
          (commit-id-short (map-elt data 'commit-id-short))
          (commit-id-shortest (map-elt data 'commit-id-shortest))
+         (branches (map-elt data 'branches))
+         (branches (if branches (concat (propertize branches 'face 'magit-branch-local)
+                                        " | ")
+                     ""))
          (empty (map-elt data 'empty))
          (empty (if (string= empty "true")
                     (propertize "(empty) " 'face 'warning)
@@ -186,9 +191,10 @@ If USE-CONFIG is t, run jj without suppressing the user config."
                         (propertize "(no description set)" 'face 'warning)))
          (change-id (jj-format-id change-id-short change-id-shortest))
          (commit-id (jj-format-id commit-id-short commit-id-shortest)))
-    (format "%s %s %s%s"
+    (format "%s %s %s%s%s"
             change-id
             commit-id
+            branches
             empty
             description)))
 
