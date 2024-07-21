@@ -10,6 +10,13 @@
 (require 'ert)
 
 (defun jj-show-w/template (template &optional rev)
+  "Run `jj show' command with a custom TEMPLATE and optional REV.
+
+TEMPLATE is a string containing the custom template for the `jj show' command.
+REV is an optional revision specifier. If not provided, it defaults to '@'
+
+This function constructs and executes a `jj show' command with the given
+template and revision, returning the command's output as a string."
   (let* ((rev (or rev "@"))
          (formatted (format "show --summary --template \"%s\" %s"
                             template
@@ -17,6 +24,13 @@
     (jj-run-command formatted)))
 
 (defun jj-log-w/template (template)
+    "Run `jj log' command with a custom TEMPLATE.
+
+TEMPLATE is a string containing the custom template for the `jj log' command.
+
+This function constructs and executes a `jj log' command with the given
+template, disabling graph output and adding newlines between entries. It returns
+the command's output as a string, with each log entry separated by newlines."
   (let* ((formatted (format "log --no-graph --template \"%s ++ \\\"\\n\\n\\\"\""
                             template)))
     (jj-run-command formatted)))
@@ -38,15 +52,8 @@ If USE-CONFIG is t, run jj without suppressing the user config."
     (shell-command-to-string cmd-string)))
 
 (defun jj-file-list ()
-  "Get the list of files from 'jj file list' command."
+  "Get the list of files from `jj file list' command."
   (split-string (jj-run-command "file list") "\n" t))
-
-(defun jj-st-insert-file-list (files)
-  "Insert the file list as a section."
-  (magit-insert-section (jj-files)
-    (magit-insert-heading "Files:")
-    (dolist (file files)
-      (insert (format "  %s\n" file)))))
 
 (defun map-to-escaped-string (map)
   "Convert MAP (plist, alist, or hash-table) to an escaped string."
@@ -65,33 +72,33 @@ If USE-CONFIG is t, run jj without suppressing the user config."
 
 (defun parse-key-value (line)
   "Parse a KEY-VALUE LINE into a cons of (key . value)."
-  (when (string-match (rx bos
-                          (group (+ (not (any " "))))  ; key
-                          " "
-                          (optional (group (+ not-newline)))  ; optional value
-                          eos) line)
-    (cons (intern (match-string 1 line)) (match-string 2 line))))
+  (unless (string-match-p (rx bos (any "AMD") " ") line)
+    (when (string-match (rx bos
+                            (group (+ (not (any " ")))) ; key
+                            " "
+                            (optional (group (+ not-newline))) ; optional value
+                            eos) line)
+      (cons (intern (match-string 1 line)) (match-string 2 line)))))
 
-(defun categorize-file-changes (file-changes)
-  "Organize FILE-CHANGES into categories."
-  (let ((categories (make-hash-table :test 'equal)))
-    (dolist (change file-changes)
-      (let ((type (car change))
-            (file (cdr change)))
-        (push file (gethash type categories '()))))
-    (maphash (lambda (k v) (puthash k (nreverse v) categories)) categories)
-    categories))
+(defun parse-and-group-file-changes (file-changes)
+  "Parse and group FILE-CHANGES by their change type."
+  (let* ((parsed-changes (mapcar #'parse-file-change file-changes))
+         (grouped-changes (seq-group-by #'car parsed-changes)))
+    grouped-changes
+     (seq-map (lambda (group)
+                (cons (car group)
+                      (list (mapcar #'cdr (cdr group)))))
+              grouped-changes)))
 
 (defun parse-string-to-map (input-string)
   "Parse INPUT-STRING into a map and an organized list of file changes."
   (let* ((lines (split-string input-string "\n" t))
-         (file-changes (delq nil (mapcar #'parse-file-change lines)))
+         (file-change-lines (seq-filter #'parse-file-change lines))
          (key-values (delq nil (mapcar #'parse-key-value lines)))
          (result-map (make-hash-table :test 'equal)))
     (dolist (kv key-values)
       (puthash (car kv) (cdr kv) result-map))
-    (list result-map (categorize-file-changes file-changes))))
-
+    (list result-map (parse-and-group-file-changes file-change-lines))))
 
 ;; (-> '(commit-id "commit_id"
 ;;       commit-id-short "commit_id.short()"
@@ -152,8 +159,7 @@ If USE-CONFIG is t, run jj without suppressing the user config."
                     description "description")))
     (-> (map-to-escaped-string template)
         (jj-show-w/template rev)
-        parse-string-to-map
-        car)))
+        parse-string-to-map)))
 
 (defun jj-format-id (id-short id-shortest)
   "Format ID-SHORT with ID-SHORTEST distinguished."
@@ -171,30 +177,59 @@ If USE-CONFIG is t, run jj without suppressing the user config."
          (commit-id-short (map-elt data 'commit-id-short))
          (commit-id-shortest (map-elt data 'commit-id-shortest))
          (description (map-elt data 'description))
+         (description (if description (propertize description 'face 'jujutsu-description-face)
+                        (propertize "(no description set)" 'face 'warning)))
          (change-id (jj-format-id change-id-short change-id-shortest))
          (commit-id (jj-format-id commit-id-short commit-id-shortest)))
     (format "%s %s %s"
             change-id
             commit-id
-            (propertize description 'face 'jujutsu-description-face))))
+            description)))
+
+(defun jj-transform-file-list (file-changes)
+  "Transform FILE-CHANGES into a list with descriptive prefixes."
+  (let ((result '()))
+    (dolist (change file-changes)
+      (let* ((type (car change))
+             (files (cadr change))
+             (prefix (cond
+                      ((string= type "A") "added")
+                      ((string= type "M") "modified")
+                      ((string= type "D") "deleted"))))
+        (setq result (append result
+                             (mapcar (lambda (file)
+                                       (format "%s %s" prefix file))
+                                     files)))))
+    result))
+
+(-> "@"
+    jj-get-status-data
+    ;;(map-elt 'M)
+    ;; jj-transform-file-list
+    )
 
 (defun jujutsu-status ()
   "Display a summary of the current Jujutsu working copy status."
   (interactive)
-  (let ((wc-status-data (jj-get-status-data "@"))
-        (p-status-data (jj-get-status-data "@-")))
+  (let* ((wc-status (jj-get-status-data "@"))
+         (wc-status-data (car wc-status))
+         (wc-status-files (cadr wc-status))
+         (p-status (jj-get-status-data "@-"))
+         (p-status-data (car p-status))
+         (p-status-files (cadr p-status)))
     (with-current-buffer (get-buffer-create "*jujutsu-status*")
       (let ((inhibit-read-only t))
         (erase-buffer)
         (insert (format "%s %s\n"
-                        (propertize "Parent commit:" 'face 'font-lock-type-face)
-                        (jj-format-status-line p-status-data)))
-        (insert (format "%s %s\n\n"
                         (propertize "Working copy :" 'face 'font-lock-type-face)
                         (jj-format-status-line wc-status-data)))
-        (insert (propertize "Files:\n" 'face 'font-lock-keyword-face))
-        (dolist (file (jj-file-list))
-          (insert (format "  %s\n" (propertize file 'face 'font-lock-string-face)))))
+        (insert (format "%s %s\n"
+                        (propertize "Parent commit:" 'face 'font-lock-type-face)
+                        (jj-format-status-line p-status-data)))
+        (insert "\n")
+        (insert (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face))
+        (dolist (file (jj-transform-file-list wc-status-files))
+          (insert (format "%s\n" (propertize file 'face 'font-lock-string-face)))))
       (goto-char (point-min))
       (jujutsu-status-mode)
       (display-buffer (current-buffer)))))
@@ -205,3 +240,6 @@ If USE-CONFIG is t, run jj without suppressing the user config."
   (setq buffer-read-only t))
 
 (define-key jujutsu-status-mode-map (kbd "g") #'jujutsu-status)
+
+(provide 'jujutsu-mode)
+;;; jujutsu-mode.el ends here
