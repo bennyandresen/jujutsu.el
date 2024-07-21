@@ -156,6 +156,7 @@ If USE-CONFIG is t, run jj without suppressing the user config."
                     change-id-shortest "change_id.shortest()"
                     commit-id-short "commit_id.short(8)"
                     commit-id-shortest "commit_id.shortest()"
+                    empty "empty"
                     description "description")))
     (-> (map-to-escaped-string template)
         (jj-show-w/template rev)
@@ -176,14 +177,19 @@ If USE-CONFIG is t, run jj without suppressing the user config."
          (change-id-shortest (map-elt data 'change-id-shortest))
          (commit-id-short (map-elt data 'commit-id-short))
          (commit-id-shortest (map-elt data 'commit-id-shortest))
+         (empty (map-elt data 'empty))
+         (empty (if (string= empty "true")
+                    (propertize "(empty) " 'face 'warning)
+                  ""))
          (description (map-elt data 'description))
          (description (if description (propertize description 'face 'jujutsu-description-face)
                         (propertize "(no description set)" 'face 'warning)))
          (change-id (jj-format-id change-id-short change-id-shortest))
          (commit-id (jj-format-id commit-id-short commit-id-shortest)))
-    (format "%s %s %s"
+    (format "%s %s %s%s"
             change-id
             commit-id
+            empty
             description)))
 
 (defun jj-transform-file-list (file-changes)
