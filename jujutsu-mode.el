@@ -4,6 +4,7 @@
 ;;; Code:
 ;;; TBD
 
+(require 'dash)
 (require 'map)
 (require 'transient)
 (require 'magit-section)
@@ -174,29 +175,27 @@ If USE-CONFIG is t, run jj without suppressing the user config."
 
 (defun jj-format-status-line (data)
   "Format a status line using DATA with fontification."
-  (let* ((change-id-short (map-elt data 'change-id-short))
-         (change-id-shortest (map-elt data 'change-id-shortest))
-         (commit-id-short (map-elt data 'commit-id-short))
-         (commit-id-shortest (map-elt data 'commit-id-shortest))
-         (branches (map-elt data 'branches))
-         (branches (if branches (concat (propertize branches 'face 'magit-branch-local)
-                                        " | ")
-                     ""))
-         (empty (map-elt data 'empty))
-         (empty (if (string= empty "true")
-                    (propertize "(empty) " 'face 'warning)
-                  ""))
-         (description (map-elt data 'description))
-         (description (if description (propertize description 'face 'jujutsu-description-face)
-                        (propertize "(no description set)" 'face 'warning)))
-         (change-id (jj-format-id change-id-short change-id-shortest))
-         (commit-id (jj-format-id commit-id-short commit-id-shortest)))
-    (format "%s %s %s%s%s"
-            change-id
-            commit-id
-            branches
-            empty
-            description)))
+  (-let* [((&hash 'change-id-short chids
+                  'change-id-shortest chidss
+                  'commit-id-short coids
+                  'commit-id-shortest coidss
+                  'branches branches
+                  'empty empty
+                  'description desc)
+           data)
+          (empty (if (string= empty "true")
+                     (propertize "(empty) " 'face 'warning)
+                   ""))
+          (branches (if branches
+                        (concat (propertize branches 'face 'magit-branch-local)
+                                " | ")
+                      ""))
+          (change-id (jj-format-id chids chidss))
+          (commit-id (jj-format-id coids coidss))
+          (desc (if desc
+                    (propertize desc 'face 'jujutsu-description-face)
+                  (propertize "(no description set)" 'face 'warning)))]
+    (format "%s %s %s%s%s" change-id commit-id branches empty desc)))
 
 (defun jj-transform-file-list (file-changes)
   "Transform FILE-CHANGES into a list with descriptive prefixes."
