@@ -230,7 +230,10 @@ Parent commit: mmqxuuoo 971c5781 flake update, for unstable.yt-dlp"
 (defun jj-show-w/template (template &optional rev)
   (let* ((rev (or rev "@"))
          (formatted (format "show --summary --template \"%s\" %s" template rev)))
-    (message formatted)
+    (jj-run-command formatted)))
+
+(defun jj-log-w/template (template)
+  (let* ((formatted (format "log --no-graph --template \"%s ++ \\\"\\n\\n\\\"\"" template)))
     (jj-run-command formatted)))
 
 
@@ -401,23 +404,44 @@ If USE-CONFIG is t, run jj without suppressing the user config."
        ((string-match key-value-rx line)
         (let ((key (match-string 1 line))
               (value (match-string 2 line)))
-          (puthash key value result-map)))))
+          (puthash (intern key) value result-map)))))
 
     ;; Reverse the file lists to maintain original order
     (maphash (lambda (k v) (puthash k (nreverse v) file-changes)) file-changes)
 
     (list result-map file-changes)))
 
-(-> '(working_copy__commit_id "commit_id"
-      working_copy__commit_id_short "commit_id.short()"
-      working_copy__commit_id_shortest "commit_id.shortest()"
-      working_copy__change_id "change_id"
-      working_copy__change_id_short "change_id.short()"
-      working_copy__change_id_shortest "change_id.shortest()"
-      working_copy__author "author"
-      working_copy__conflict "conflict"
-      working_copy__empty "empty"
-      working_copy__description "description")
+(-> '(commit_id "commit_id"
+      commit_id_short "commit_id.short()"
+      commit_id_shortest "commit_id.shortest()"
+      change_id "change_id"
+      change_id_short "change_id.short()"
+      change_id_shortest "change_id.shortest()"
+      author "author"
+      conflict "conflict"
+      empty "empty"
+      description "description")
     map-to-escaped-string
     (jj-show-w/template "@")
-    parse-string-to-map)
+    parse-string-to-map
+    car
+    (map-elt 'commit_id_shortest))
+
+(defun split-string-on-empty-lines (input-string)
+  "Split INPUT-STRING into multiple strings based on empty lines."
+  (let ((rx-split (rx bol (zero-or-more space) eol
+                      (one-or-more (any space ?\n))
+                      bol (zero-or-more space) eol)))
+    (split-string input-string rx-split t "[ \t\n]+")))
+
+(seq-map #'parse-string-to-map
+        (-> '(commit-id "commit_id"
+              commit-id-short "commit_id.short()"
+              commit-id-shortest "commit_id.shortest()"
+              change-id "change_id"
+              change-id-short "change_id.short()"
+              change-id-shortest "change_id.shortest()"
+              description "description")
+            map-to-escaped-string
+            jj-log-w/template
+            split-string-on-empty-lines))
