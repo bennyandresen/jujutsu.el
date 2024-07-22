@@ -218,14 +218,68 @@ the command's output as a string, with each log entry separated by newlines."
          insert))
       (goto-char (point-min))
       (jujutsu-status-mode)
-      (display-buffer (current-buffer)))))
+      (switch-to-buffer "*jujutsu-status*"))))
 
-(define-derived-mode jujutsu-status-mode special-mode "Jujutsu Status"
+(define-derived-mode jujutsu-status-mode special-mode "jujutsu status"
   "Major mode for displaying Jujutsu status."
   :group 'jujutsu
   (setq buffer-read-only t))
 
 (define-key jujutsu-status-mode-map (kbd "g") #'jujutsu-status)
+
+(defun jujutsu-status-squash (args)
+  "Run jj squash with ARGS."
+  (interactive (list (transient-args 'jujutsu-status-squash-popup)))
+  (let ((cmd (concat "squash " (s-join " " args))))
+    (jj--run-command cmd t)
+    (jujutsu-status)))
+
+(defun jujutsu-status-new ()
+  "Run jj new."
+  (interactive)
+  (jj--run-command "new" t)
+  (jujutsu-status))
+
+(defun jujutsu-status-abandon ()
+  "Run `jj abandon'."
+  (interactive)
+  (jj--run-command "abandon" t)
+  (jujutsu-status))
+
+(defun jujutsu-status-describe (args)
+  "Run jj describe with ARGS."
+  (interactive (list (transient-args 'jujutsu-status-describe-popup)))
+  (let ((cmd (concat "describe " (s-join " " args))))
+    (jj--run-command cmd t)
+    (jujutsu-status)))
+
+(transient-define-prefix jujutsu-status-describe-popup ()
+  "Popup for jj describe options."
+  ["Options"
+   ("-m" "Message" "-m=" :reader (lambda (&rest _args) (s-concat "\"" (read-string "-m ") "\"")))]
+  ["Actions"
+   ("d" "Describe" jujutsu-status-describe)])
+
+(transient-define-prefix jujutsu-status-squash-popup ()
+  "Popup for jj squash options."
+  ["Options"
+   ("-I" "Ignore immutable" "--ignore-immutable")]
+  ["Actions"
+   ("s" "Squash" jujutsu-status-squash)])
+
+(transient-define-prefix jujutsu-status-popup ()
+  "Popup for jujutsu actions in status buffer."
+  ["Actions"
+   ("a" "Abandon change" jujutsu-status-abandon)
+   ("s" "Squash change" jujutsu-status-squash-popup)
+   ("d" "Describe change" jujutsu-status-describe-popup)
+   ("n" "New change" jujutsu-status-new)])
+
+(define-key jujutsu-status-mode-map (kbd "?") #'jujutsu-status-popup)
+(define-key jujutsu-status-mode-map (kbd "a") #'jujutsu-status-abandon)
+(define-key jujutsu-status-mode-map (kbd "s") #'jujutsu-status-squash-popup)
+(define-key jujutsu-status-mode-map (kbd "d") #'jujutsu-status-describe-popup)
+(define-key jujutsu-status-mode-map (kbd "n") #'jujutsu-status-new)
 
 (provide 'jujutsu)
 ;;; jujutsu.el ends here
