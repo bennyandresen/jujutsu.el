@@ -190,23 +190,32 @@ the command's output as a string, with each log entry separated by newlines."
     (with-current-buffer (get-buffer-create "*jujutsu-status*")
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert (format "%s %s\n"
-                        (propertize "Working copy :" 'face 'font-lock-type-face)
-                        (jj--format-status-line wc-status)))
-        (insert (format "%s %s\n"
-                        (propertize "Parent commit:" 'face 'font-lock-type-face)
-                        (jj--format-status-line p-status)))
-        (insert "\n")
-        (if (> (length all-files) 0)
-            (progn
-              (insert (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face))
-              (dolist (added-file files-added)
-                (insert (propertize (format "A %s\n" added-file) 'face 'magit-diffstat-added)))
-              (dolist (modified-file files-modified)
-                (insert (propertize (format "M %s\n" modified-file) 'face 'diff-changed)))
-              (dolist (deleted-file files-deleted)
-                (insert (propertize (format "D %s\n" deleted-file) 'face 'magit-diffstat-removed))))
-          (insert (propertize "The working copy is clean" 'face 'font-lock-keyword-face))))
+        (->>
+         (list (format "%s %s\n"
+                       (propertize "Working copy :" 'face 'font-lock-type-face)
+                       (jj--format-status-line wc-status))
+               (format "%s %s\n"
+                       (propertize "Parent commit:" 'face 'font-lock-type-face)
+                       (jj--format-status-line p-status))
+               "\n"
+               (if (> (length all-files) 0)
+                   (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face)
+                 (propertize "The working copy is clean" 'face 'font-lock-keyword-face))
+               (-map (lambda (added-file) (propertize (format "A %s\n" added-file)
+                                                 'face
+                                                 'magit-diffstat-added))
+                     files-added)
+               (-map (lambda (modified-file) (propertize (format "M %s\n" modified-file)
+                                                    'face
+                                                    'diff-changed))
+                     files-modified)
+               (-map (lambda (deleted-file) (propertize (format "D %s\n" deleted-file)
+                                                   'face
+                                                   'magit-diffstat-removed))
+                     files-deleted))
+         -flatten
+         (apply #'s-concat)
+         insert))
       (goto-char (point-min))
       (jujutsu-status-mode)
       (display-buffer (current-buffer)))))
