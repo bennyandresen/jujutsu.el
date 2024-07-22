@@ -1,4 +1,4 @@
-;;; jujutsu-mode.el -- Summary: Blah
+;;; jujutsu.el --- Experimental porcelain for experimental CVS  -*- lexical-binding: t -*-
 ;;; Commentary:
 ;;; Experimental Emacs Major-Mode for experimental VCS
 ;;; Code:
@@ -220,5 +220,5 @@ the command's output as a string, with each log entry separated by newlines."
 
 (define-key jujutsu-status-mode-map (kbd "g") #'jujutsu-status)
 
-(provide 'jujutsu-mode)
-;;; jujutsu-mode.el ends here
+(provide 'jujutsu)
+;;; jujutsu.el ends here
