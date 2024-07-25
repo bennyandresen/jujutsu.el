@@ -1,1 +1,3 @@
 flycheck_*
+/.jj/*
+.projectile
