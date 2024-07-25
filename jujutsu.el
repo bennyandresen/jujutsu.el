@@ -11,6 +11,8 @@
 (require 'magit-section)
 (require 'ert)
 
+(require 'jujutsu-utils)
+
 (defface jujutsu-id-face
   '((t :inherit font-lock-comment-face))
   "Face used for Jujutsu commit IDs and change IDs."
@@ -25,6 +27,11 @@
   '((t :inherit text))
   "Face used for Jujutsu commit descriptions."
   :group 'jujutsu)
+
+(defcustom jujutsu-log-revset-fallback "@ | ancestors(immutable_heads().., 2) | trunk()"
+  "Default value when no revset is specified."
+  :group 'jujutsu
+  :type 'string)
 
 (defun jj--find-project-root ()
   "Find the root directory of the Jujutsu project."
@@ -56,15 +63,17 @@ template and revision, returning the command's output as a string."
                             rev)))
     (jj--run-command formatted)))
 
-(defun jj--log-w/template (template)
-    "Run `jj log' command with a custom TEMPLATE.
+(defun jj--log-w/template (template &optional revset)
+  "Run `jj log' command with a custom TEMPLATE and optional REVSET.
 
 TEMPLATE is a string containing the custom template for the `jj log' command.
 
 This function constructs and executes a `jj log' command with the given
 template, disabling graph output and adding newlines between entries. It returns
 the command's output as a string, with each log entry separated by newlines."
-  (let* ((formatted (format "log --no-graph --template \"%s ++ \\\"\\n\\n\\\"\""
+  (let* ((revset (or revset jujutsu-log-revset-fallback))
+         (formatted (format "log --revisions \"%s\" --no-graph --template \"%s ++ \\\"\\n\\n\\\"\""
+                            revset
                             template)))
     (jj--run-command formatted)))
 
@@ -75,7 +84,7 @@ the command's output as a string, with each log entry separated by newlines."
        (s-split "\n" it t)))
 
 (defun jj--map-to-escaped-string (map)
-  "Convert MAP (hash-table) to an escaped string."
+  "Convert MAP (hash-table) to an escaped string for use as a jj template."
   (->> map
        (ht-map (lambda (key value)
                  (format "\\\"%s \\\" ++ %s ++ \\\"\\\\n\\\""
@@ -83,14 +92,14 @@ the command's output as a string, with each log entry separated by newlines."
        (s-join " ++ ")))
 
 (defun jj--parse-file-change (line)
-  "Parse a file change LINE into a cons of (type . filename)."
+  "Parse a file change LINE into a hash-table."
   (-let* [(regex (rx bos (group (any "AMD")) " " (group (+ not-newline)) eos) line)
           ((res m1 m2) (s-match regex line))]
     (when res
       (ht (m1 m2)))))
 
 (defun jj--parse-key-value (line)
-  "Parse a KEY-VALUE LINE into a cons of (key . value)."
+  "Parse a KEY-VALUE LINE into a hash-table."
   (unless (s-matches? (rx bos (any "AMD") " ") line)
     (-when-let* [(regex (rx bos
                             (group (+ (not (any " ")))) ; key
@@ -101,7 +110,7 @@ the command's output as a string, with each log entry separated by newlines."
       (ht ((intern m1) m2)))))
 
 (defun jj--parse-and-group-file-changes (file-changes)
-  "Parse and group FILE-CHANGES by their change type."
+  "Parse and group FILE-CHANGES by their change type into a hash-table."
   (let ((grouped-changes (ht ('files-added nil)
                              ('files-modified nil)
                              ('files-deleted nil))))
@@ -115,7 +124,7 @@ the command's output as a string, with each log entry separated by newlines."
     grouped-changes))
 
 (defun jj--parse-string-to-map (input-string)
-  "Parse INPUT-STRING into a map and an organized list of file change."
+  "Parse INPUT-STRING into a hash-table and an organized list of file change."
   (let* ((lines (s-split "\n" input-string t))
          (file-change-lines (-filter #'jj--parse-file-change lines))
          (grouped-file-changes (jj--parse-and-group-file-changes file-change-lines))
@@ -139,10 +148,33 @@ the command's output as a string, with each log entry separated by newlines."
                       ('commit-id-shortest "commit_id.shortest()")
                       ('empty "empty")
                       ('branches "branches")
+                      ('git-head "git_head")
                       ('description "description"))))
     (-> (jj--map-to-escaped-string template)
         (jj--show-w/template rev)
         jj--parse-string-to-map)))
+
+(defun jj--get-log-data (&optional revset)
+  "Get status data for the given REVSET."
+  (let ((revset (or revset jujutsu-log-revset-fallback))
+        (template (ht ('change-id-short "change_id.short(8)")
+                      ('change-id-shortest "change_id.shortest()")
+                      ('commit-id-short "commit_id.short(8)")
+                      ('commit-id-shortest "commit_id.shortest()")
+                      ('empty "empty")
+                      ('branches "branches")
+                      ('hidden "hidden")
+                      ('author-email "author.email()")
+                      ('timestamp "author.timestamp().format(\\\"%Y-%m-%d %H:%M:%S\\\")")
+                      ('current-working-copy "current_working_copy")
+                      ('remote-branches "remote_branches")
+                      ('git-head "git_head")
+                      ('root "root")
+                      ('description "description"))))
+    (--> (jj--map-to-escaped-string template)
+        (jj--log-w/template it revset)
+        (jj--split-string-on-empty-lines it)
+        (-map #'jj--parse-string-to-map it))))
 
 (defun jj--format-id (id-short id-shortest)
   "Format ID-SHORT with ID-SHORTEST distinguished."
@@ -177,6 +209,49 @@ the command's output as a string, with each log entry separated by newlines."
                   (propertize "(no description set)" 'face 'warning)))]
     (format "%s %s %s%s%s" change-id commit-id branches empty desc)))
 
+(defun jj--format-log-line (data)
+  "Format a status line using DATA with fontification."
+  (-let* [((&hash 'change-id-short chids 'change-id-shortest chidss
+                  'commit-id-short coids 'commit-id-shortest coidss
+                  'branches branches 'empty empty 'description desc
+                  'root root 'author-email author-email
+                  'timestamp timestamp
+                  'current-working-copy cwc)
+           data)
+          (cwc (if (s-equals? cwc "true") "@" "◉"))
+          (author-email (if author-email
+                            (propertize author-email 'face 'warning)
+                          ""))
+          (root (if (s-equals? root "true") t nil))
+          (empty (if (s-equals? empty "true")
+                     (propertize "(empty) " 'face 'warning)
+                   ""))
+          (timestamp (if timestamp (propertize timestamp 'face 'magit-log-date)
+                       ""))
+          (branches (if branches
+                        (s-concat (propertize branches 'face 'magit-branch-local) " ")
+                      ""))
+          (change-id (jj--format-id chids chidss))
+          (commit-id (jj--format-id coids coidss))
+          (desc (if desc
+                    (propertize desc 'face 'jujutsu-description-face)
+                  (propertize "(no description set)" 'face 'warning)))]
+    (if root
+        (list (format "%s  %s %s %s\n"
+                      cwc
+                      change-id
+                      (propertize "root()" 'face 'magit-keyword)
+                      commit-id) )
+      (list
+       (format "%s  %s %s %s %s%s\n" cwc change-id author-email timestamp branches commit-id)
+       (format "│  %s%s\n" empty desc)))))
+
+(defun jj--foobar (revset)
+  "Fooofoofofofo REVSET fooo."
+  (let* ((log-data (jj--get-log-data revset))
+         (includes-root? (-some (lambda (m) (string= (ht-get m 'root) "true")) log-data)))
+    (-concat (-map #'jj--format-log-line log-data) (when (not includes-root?) (list "~")))))
+
 (defun jujutsu-status ()
   "Display a summary of the current Jujutsu working copy status."
   (interactive)
@@ -200,7 +275,7 @@ the command's output as a string, with each log entry separated by newlines."
                "\n"
                (if (> (length all-files) 0)
                    (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face)
-                 (propertize "The working copy is clean" 'face 'font-lock-keyword-face))
+                 (propertize "The working copy is clean\n" 'face 'font-lock-keyword-face))
                (-map (lambda (added-file) (propertize (format "A %s\n" added-file)
                                                  'face
                                                  'magit-diffstat-added))
@@ -212,7 +287,11 @@ the command's output as a string, with each log entry separated by newlines."
                (-map (lambda (deleted-file) (propertize (format "D %s\n" deleted-file)
                                                    'face
                                                    'magit-diffstat-removed))
-                     files-deleted))
+                     files-deleted)
+               "\n"
+               (propertize "Log:\n" 'face 'font-lock-keyword-face)
+               (jj--foobar jujutsu-log-revset-fallback)
+               )
          -flatten
          (apply #'s-concat)
          insert))

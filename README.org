@@ -1,0 +1,32 @@
+#+title: Areas to work on
+
+* Status
+** A/M/D file overview
+** Diffs
+*** Side-By-Side Diff
+**** split based on git and then reconstitute with overlays
+**** investigate overlays or how magit did it
+*** Segments
+**** within the same file the different segments
+*** squash action acting only on currently selected segment/file
+** Shortlog equivalent
+*** make configurable
+** Overview (Two liner)
+*** conflict marker missing
+* Log
+** Operation Log
+** Obslog
+** Commit Log
+* Actions
+** Squash -i
+*** figure out how to call emacs after jj prepares temporary directory
+**** uses ui.diff-editor even for squash
+**** by default everything is selected for squash, revert needed
+** Diff
+***
+* Minibuffer integration
+** parent change > change > description
+** also show change id after each save?
+* Multiple workflow
+** Squash workflow
+** Split workflow
