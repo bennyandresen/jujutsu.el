@@ -91,6 +91,14 @@ the command's output as a string, with each log entry separated by newlines."
                          key value)))
        (s-join " ++ ")))
 
+(-tests
+ (let ((m (ht ('foo nil)
+            ('bar 1))))
+   (jj--map-to-escaped-string m))
+ :=
+ "\\\"bar \\\" ++ 1 ++ \\\"\\\\n\\\" ++ \\\"foo \\\" ++ nil ++ \\\"\\\\n\\\""
+ )
+
 (defun jj--parse-file-change (line)
   "Parse a file change LINE into a hash-table."
   (-let* [(regex (rx bos (group (any "AMD")) " " (group (+ not-newline)) eos) line)
@@ -137,7 +145,6 @@ the command's output as a string, with each log entry separated by newlines."
   (let ((rx-split (rx bol (zero-or-more space) eol
                       (one-or-more (any space ?\n))
                       bol (zero-or-more space) eol)))
-    ;; (split-string input-string rx-split t "[ \t\n]+")
     (s-split rx-split input-string t)))
 
 (defun jj--get-status-data (rev)
@@ -246,11 +253,22 @@ the command's output as a string, with each log entry separated by newlines."
        (format "%s  %s %s %s %s%s\n" cwc change-id author-email timestamp branches commit-id)
        (format "│  %s%s\n" empty desc)))))
 
-(defun jj--foobar (revset)
-  "Fooofoofofofo REVSET fooo."
+(defun jj--format-log-entries (revset)
+  "Format log entries for REVSET as a list of strings.
+
+This function retrieves log data for the given REVSET, formats each entry,
+and returns a list of formatted strings. Each log entry is formatted using
+`jj--format-log-line`.
+
+If the log data includes the root commit, it will be included in the output.
+Otherwise, a tilde '~' is appended to indicate there are earlier commits
+not shown.
+
+REVSET is a string specifying the revision set to display in the log."
   (let* ((log-data (jj--get-log-data revset))
          (includes-root? (-some (lambda (m) (string= (ht-get m 'root) "true")) log-data)))
-    (-concat (-map #'jj--format-log-line log-data) (when (not includes-root?) (list "~")))))
+    (-concat (-map #'jj--format-log-line log-data)
+             (when (not includes-root?) (list "~")))))
 
 (defun jujutsu-status ()
   "Display a summary of the current Jujutsu working copy status."
@@ -290,8 +308,7 @@ the command's output as a string, with each log entry separated by newlines."
                      files-deleted)
                "\n"
                (propertize "Log:\n" 'face 'font-lock-keyword-face)
-               (jj--foobar jujutsu-log-revset-fallback)
-               )
+               (jj--format-log-entries jujutsu-log-revset-fallback))
          -flatten
          (apply #'s-concat)
          insert))

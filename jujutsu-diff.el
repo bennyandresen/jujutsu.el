@@ -17,6 +17,7 @@
 ;;  Description
 ;;
 ;;; Code:
+(require 'jujutsu-dash)
 (require 'jujutsu-utils)
 (require 's)
 
@@ -36,7 +37,7 @@
       (push current-diff file-diffs))
     (nreverse file-diffs)))
 
-(jj--comment
+(-tests
  (->> "resources/test-diff-git.output"
       jj--slurp
       jj--split-git-diff
@@ -59,7 +60,7 @@
       (push (buffer-substring-no-properties hunk-start (point-max)) hunks)
       (nreverse hunks))))
 
-(jj--comment
+(-comment
  (->> "resources/test-diff-git.output"
       jj--slurp
       jj--split-git-diff
@@ -90,7 +91,7 @@
         (push entry result)))
     (nreverse result)))
 
-(jj--comment
+(-tests
  (->> "resources/test-diff-git.output"
       jj--slurp
       jj--split-git-diff
@@ -98,8 +99,22 @@
       jj--split-git-diff-into-hunks
       (nth 3)
       jj--parse-diff-hunk
-      jj--display-in-buffer)
- 1)
+      jj--ht-to-edn-pp)
+ :=
+ "[{:type :header, :content \"@@ -75,7 +82,7 @@\"}
+ {:type :context, :content \"        (s-split \\\"\\\\n\\\" it t)))\"}
+ {:type :context, :content \"\"}
+ {:type :context, :content \" (defun jj--map-to-escaped-string (map)\"}
+ {:type :removed,
+  :content \"  \\\"Convert MAP (hash-table) to an escaped string.\\\"\"}
+ {:type :added,
+  :content \"  \\\"Convert MAP (hash-table) to an escaped string for use as a jj template.\\\"\"}
+ {:type :context, :content \"   (->> map\"}
+ {:type :context, :content \"        (ht-map (lambda (key value)\"}
+ {:type :context,
+  :content \"                  (format \\\"\\\\\\\\\\\\\\\"%s \\\\\\\\\\\\\\\" ++ %s ++ \\\\\\\\\\\\\\\"\\\\\\\\\\\\\\\\n\\\\\\\\\\\\\\\"\\\"\"}
+ {:type :context, :content \"\"}]
+")
 
 (defun jj--max-content-width (chunks type)
   "Calculate the maximum content width for CHUNKS of given TYPE."
@@ -161,7 +176,7 @@
                      formatted)
                (cdr removed)))))))
 
-(defun jj--create-side-by-side-diff6 (diff-git-chunk)
+(defun jj--create-side-by-side-diff (diff-git-chunk)
   "Create a side-by-side diff representation from DIFF-GIT-CHUNK."
   (let* ((left-width (jj--max-content-width diff-git-chunk :removed))
          (right-width (jj--max-content-width diff-git-chunk :added))
@@ -180,7 +195,7 @@
      (--map (jj--format-line it (ht-create) left-width right-width separator)
             remaining-removed))))
 
-(jj--comment
+(-comment
  (with-current-buffer "*jj debug*"
    (erase-buffer)
    (->> "resources/test-diff-git.output"

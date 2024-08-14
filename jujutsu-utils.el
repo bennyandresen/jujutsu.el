@@ -19,10 +19,10 @@
 ;;
 ;;; Code:
 
+(require 'jujutsu-dash)
 (require 'parseedn)
-
-(defmacro jj--comment (&rest _body)
-  nil)
+(require 'dash)
+(require 's)
 
 (defun jj--slurp (filename)
   (with-temp-buffer
@@ -38,8 +38,16 @@
       (parseedn-print-hash-or-alist x)
       (insert "]")
       (write-region (point-min) (point-max) temp-file)
-      (message "temp-file: %s" temp-file)
       (shell-command-to-string (s-join " " (list "cat" temp-file "|" "jet"))))))
+
+(defun jj--display-in-buffer (x)
+  "Display the pretty-printed EDN representation of X in the *jj debug* buffer.
+If the buffer doesn't exist, it will be created. The buffer's content is
+replaced with the new output each time this function is called."
+  (with-current-buffer (get-buffer-create "*jj debug*")
+    (erase-buffer)
+    (insert (jj--ht-to-edn-pp x))
+    (display-buffer (current-buffer))))
 
 (provide 'jujutsu-utils)
 ;;; jujutsu-utils.el ends here
