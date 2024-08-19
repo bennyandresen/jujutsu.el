@@ -270,6 +270,26 @@ REVSET is a string specifying the revision set to display in the log."
     (-concat (-map #'jj--format-log-line log-data)
              (when (not includes-root?) (list "~")))))
 
+  (define-fringe-bitmap 'jujutsu-fringe-triangle-right
+    [#b01100000
+     #b00110000
+     #b00011000
+     #b00001100
+     #b00011000
+     #b00110000
+     #b01100000
+     #b00000000])
+
+  (define-fringe-bitmap 'jujutsu-fringe-triangle-down
+    [#b00000000
+     #b10000010
+     #b11000110
+     #b01101100
+     #b00111000
+     #b00010000
+     #b00000000
+     #b00000000])
+
 (defun jujutsu-status ()
   "Display a summary of the current Jujutsu working copy status."
   (interactive)
@@ -294,13 +314,27 @@ REVSET is a string specifying the revision set to display in the log."
                (if (> (length all-files) 0)
                    (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face)
                  (propertize "The working copy is clean\n" 'face 'font-lock-keyword-face))
-               (-map (lambda (added-file) (propertize (format "A %s\n" added-file)
-                                                 'face
-                                                 'magit-diffstat-added))
+               (-map (lambda (added-file)
+                       (concat
+                        (propertize " " 'display '(left-fringe jujutsu-fringe-triangle-right))
+                        (propertize
+                         (format "A %s\n%s"
+                                 added-file
+                                 (propertize (format "  Details for %s:\n    (Add actual file details here)\n" added-file)
+                                             'invisible t
+                                             'details t))
+                         'face 'magit-diffstat-added)))
                      files-added)
-               (-map (lambda (modified-file) (propertize (format "M %s\n" modified-file)
-                                                    'face
-                                                    'diff-changed))
+               (-map (lambda (modified-file)
+                       (concat
+                        (propertize " " 'display '(left-fringe jujutsu-fringe-triangle-right))
+                        (propertize
+                         (format "M %s\n%s"
+                                 modified-file
+                                 (propertize (format "  Details for %s:\n    (Add actual file details here)\n" modified-file)
+                                             'invisible t
+                                             'details t))
+                         'face 'diff-changed)))
                      files-modified)
                (-map (lambda (deleted-file) (propertize (format "D %s\n" deleted-file)
                                                    'face
@@ -315,6 +349,29 @@ REVSET is a string specifying the revision set to display in the log."
       (goto-char (point-min))
       (jujutsu-status-mode)
       (switch-to-buffer "*jujutsu-status*"))))
+
+(defun jujutsu-toggle-file-details ()
+  "Toggle the visibility of file details for the file at point."
+  (interactive)
+  (let ((inhibit-read-only t))
+    (save-excursion
+      (beginning-of-line)
+      (when (looking-at "^\\s-*[AM] ")  ; Check if we're on a file line
+        (let* ((start (point))
+               (end (save-excursion
+                      (forward-line)
+                      (while (and (not (eobp)) (looking-at "^  "))
+                        (forward-line))
+                      (point)))
+               (details-start (1+ (line-end-position)))
+               (current-invisible (get-text-property details-start 'invisible)))
+          (when (> end start)
+            (put-text-property details-start end 'invisible (not current-invisible))
+            ;; Update the fringe indicator
+            (put-text-property start (1+ start) 'display
+                               (if current-invisible
+                                   '(left-fringe jujutsu-fringe-triangle-down)
+                                 '(left-fringe jujutsu-fringe-triangle-right)))))))))
 
 (define-derived-mode jujutsu-status-mode special-mode "jujutsu status"
   "Major mode for displaying Jujutsu status."
@@ -384,11 +441,12 @@ REVSET is a string specifying the revision set to display in the log."
    ("d" "Describe change" jujutsu-status-describe-popup)
    ("n" "New change" jujutsu-status-popup)])
 
-(define-key jujutsu-status-mode-map (kbd "?") #'jujutsu-status-popup)
-(define-key jujutsu-status-mode-map (kbd "a") #'jujutsu-status-abandon)
-(define-key jujutsu-status-mode-map (kbd "s") #'jujutsu-status-squash-popup)
-(define-key jujutsu-status-mode-map (kbd "d") #'jujutsu-status-describe-popup)
-(define-key jujutsu-status-mode-map (kbd "n") #'jujutsu-status-new-popup)
+(define-key jujutsu-status-mode-map (kbd "?")    #'jujutsu-status-popup)
+(define-key jujutsu-status-mode-map (kbd "a")    #'jujutsu-status-abandon)
+(define-key jujutsu-status-mode-map (kbd "s")    #'jujutsu-status-squash-popup)
+(define-key jujutsu-status-mode-map (kbd "d")    #'jujutsu-status-describe-popup)
+(define-key jujutsu-status-mode-map (kbd "n")    #'jujutsu-status-new-popup)
+(define-key jujutsu-status-mode-map (kbd "TAB")  #'jujutsu-toggle-file-details)
 
 (provide 'jujutsu)
 ;;; jujutsu.el ends here
