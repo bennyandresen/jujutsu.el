@@ -18,6 +18,7 @@
 ;;  Description
 ;;
 ;;; Code:
+(require 's)
 (require 'ht)
 (require 'jujutsu-dash)
 
@@ -73,19 +74,21 @@ the command's output as a string, with each log entry separated by newlines."
 
 (defun jujutsu-core--map-to-escaped-string (map)
   "Convert MAP (hash-table) to an escaped string for use as a jj template."
-  (->> map
-       (ht-map (lambda (key value)
-                 (format "\\\"%s \\\" ++ %s ++ \\\"\\\\n\\\""
-                         key value)))
-       (s-join " ++ ")))
+  (let ((k->s (lambda (k) (if (keywordp k)
+                         (intern (substring (symbol-name k) 1))
+                       k))))
+    (->> map
+         (ht-map (lambda (key value)
+                   (format "\\\"%s \\\" ++ %s ++ \\\"\\\\n\\\""
+                           (funcall k->s key) value)))
+         (s-join " ++ "))))
 
 (-tests
- (let ((m (ht ('foo nil)
-            ('bar 1))))
+ (let ((m (ht (:foo nil)
+            (:bar 1))))
    (jujutsu-core--map-to-escaped-string m))
  :=
- "\\\"bar \\\" ++ 1 ++ \\\"\\\\n\\\" ++ \\\"foo \\\" ++ nil ++ \\\"\\\\n\\\""
- )
+ "\\\"bar \\\" ++ 1 ++ \\\"\\\\n\\\" ++ \\\"foo \\\" ++ nil ++ \\\"\\\\n\\\"")
 
 (defun jujutsu-core--parse-file-change (line)
   "Parse a file change LINE into a hash-table."
@@ -96,27 +99,28 @@ the command's output as a string, with each log entry separated by newlines."
 
 (defun jujutsu-core--parse-key-value (line)
   "Parse a KEY-VALUE LINE into a hash-table."
-  (unless (s-matches? (rx bos (any "AMD") " ") line)
-    (-when-let* [(regex (rx bos
-                            (group (+ (not (any " ")))) ; key
-                            " "
-                            (optional (group (+ not-newline))) ; optional value
-                            eos))
-                 ((res m1 m2) (s-match regex line))]
-      (ht ((intern m1) m2)))))
+  (let ((s->kw (lambda (s) (intern (s-prepend ":" s)))))
+    (unless (s-matches? (rx bos (any "AMD") " ") line)
+      (-when-let* [(regex (rx bos
+                              (group (+ (not (any " ")))) ; key
+                              " "
+                              (optional (group (+ not-newline))) ; optional value
+                              eos))
+                   ((res m1 m2) (s-match regex line))]
+        (ht ((funcall s->kw m1) m2))))))
 
 (defun jujutsu-core--parse-and-group-file-changes (file-changes)
   "Parse and group FILE-CHANGES by their change type into a hash-table."
-  (let ((grouped-changes (ht ('files-added nil)
-                             ('files-modified nil)
-                             ('files-deleted nil))))
+  (let ((grouped-changes (ht (:files-added nil)
+                             (:files-modified nil)
+                             (:files-deleted nil))))
     (when-let ((parsed-changes (-map #'jujutsu-core--parse-file-change file-changes)))
       (dolist (change parsed-changes)
         (-let* [((&hash "A" a-file "M" m-file "D" d-file) change)
-                ((&hash 'files-added a-coll 'files-modified m-coll 'files-deleted d-coll) grouped-changes)]
-          (when a-file (ht-set! grouped-changes 'files-added (-concat a-coll (list a-file))))
-          (when m-file (ht-set! grouped-changes 'files-modified (-concat m-coll (list m-file))))
-          (when d-file (ht-set! grouped-changes 'files-deleted (-concat d-coll (list d-file)))))))
+                ((&hash :files-added a-coll :files-modified m-coll :files-deleted d-coll) grouped-changes)]
+          (when a-file (ht-set! grouped-changes :files-added (-concat a-coll (list a-file))))
+          (when m-file (ht-set! grouped-changes :files-modified (-concat m-coll (list m-file))))
+          (when d-file (ht-set! grouped-changes :files-deleted (-concat d-coll (list d-file)))))))
     grouped-changes))
 
 (defun jujutsu-core--parse-string-to-map (input-string)
@@ -137,14 +141,14 @@ the command's output as a string, with each log entry separated by newlines."
 
 (defun jujutsu-core--get-status-data (rev)
   "Get status data for the given REV."
-  (let ((template (ht ('change-id-short "change_id.short(8)")
-                      ('change-id-shortest "change_id.shortest()")
-                      ('commit-id-short "commit_id.short(8)")
-                      ('commit-id-shortest "commit_id.shortest()")
-                      ('empty "empty")
-                      ('branches "branches")
-                      ('git-head "git_head")
-                      ('description "description"))))
+  (let ((template (ht (:change-id-short "change_id.short(8)")
+                      (:change-id-shortest "change_id.shortest()")
+                      (:commit-id-short "commit_id.short(8)")
+                      (:commit-id-shortest "commit_id.shortest()")
+                      (:empty "empty")
+                      (:branches "branches")
+                      (:git-head "git_head")
+                      (:description "description"))))
     (-> (jujutsu-core--map-to-escaped-string template)
         (jujutsu-core--show-w/template rev)
         jujutsu-core--parse-string-to-map)))

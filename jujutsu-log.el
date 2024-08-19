@@ -30,37 +30,37 @@
   :group 'jujutsu
   :type 'string)
 
-(defun jujutsu-log--get-log-data (&optional revset)
+(defun jujutsu-log--get-log-entries (&optional revset)
   "Get status data for the given REVSET."
   (let ((revset (or revset jujutsu-log-revset-fallback))
-        (template (ht ('change-id-short "change_id.short(8)")
-                      ('change-id-shortest "change_id.shortest()")
-                      ('commit-id-short "commit_id.short(8)")
-                      ('commit-id-shortest "commit_id.shortest()")
-                      ('empty "empty")
-                      ('branches "branches")
-                      ('hidden "hidden")
-                      ('author-email "author.email()")
-                      ('timestamp "author.timestamp().format(\\\"%Y-%m-%d %H:%M:%S\\\")")
-                      ('current-working-copy "current_working_copy")
-                      ('remote-branches "remote_branches")
-                      ('git-head "git_head")
-                      ('root "root")
-                      ('immutable "immutable")
-                      ('description "description"))))
+        (template (ht (:change-id-short "change_id.short(8)")
+                      (:change-id-shortest "change_id.shortest()")
+                      (:commit-id-short "commit_id.short(8)")
+                      (:commit-id-shortest "commit_id.shortest()")
+                      (:empty "empty")
+                      (:branches "branches")
+                      (:hidden "hidden")
+                      (:author-email "author.email()")
+                      (:timestamp "author.timestamp().format(\\\"%Y-%m-%d %H:%M:%S\\\")")
+                      (:current-working-copy "current_working_copy")
+                      (:remote-branches "remote_branches")
+                      (:git-head "git_head")
+                      (:root "root")
+                      (:immutable "immutable")
+                      (:description "description"))))
     (--> (jujutsu-core--map-to-escaped-string template)
         (jujutsu-core--log-w/template it revset)
         (jujutsu-core--split-string-on-empty-lines it)
         (-map #'jujutsu-core--parse-string-to-map it))))
 
-(defun jujutsu-log--format-log-line (data)
-  "Format a status line using DATA with fontification."
-  (-let* [((&hash 'change-id-short chids 'change-id-shortest chidss
-                  'commit-id-short coids 'commit-id-shortest coidss
-                  'branches branches 'empty empty 'description desc
-                  'root root 'author-email author-email
-                  'timestamp timestamp 'immutable immutable
-                  'current-working-copy cwc)
+(defun jujutsu-log--format-log-entry (data)
+  "Format a status entry using DATA with fontification."
+  (-let* [((&hash :change-id-short chids :change-id-shortest chidss
+                  :commit-id-short coids :commit-id-shortest coidss
+                  :branches branches :empty empty :description desc
+                  :root root :author-email author-email
+                  :timestamp timestamp ':mmutable immutable
+                  :current-working-copy cwc)
            data)
           (node (cond ((s-equals? cwc "true")
                        (propertize "@" 'face 'magit-keyword))
@@ -86,31 +86,16 @@
                     (propertize desc 'face 'jujutsu-description-face)
                   (propertize "(no description set)" 'face 'warning)))]
     (if root
-        (list (format "%s  %s %s %s\n"
-                      node
-                      change-id
-                      (propertize "root()" 'face 'magit-keyword)
-                      commit-id) )
-      (list
-       (format "%s  %s %s %s %s%s\n" node change-id author-email timestamp branches commit-id)
-       (format "│  %s%s\n" empty desc)))))
-
-(defun jujutsu-log--format-log-entries (revset)
-  "Format log entries for REVSET as a list of strings.
-
-This function retrieves log data for the given REVSET, formats each entry,
-and returns a list of formatted strings. Each log entry is formatted using
-`jujutsu-formatting--format-log-line`.
-
-If the log data includes the root commit, it will be included in the output.
-Otherwise, a tilde '~' is appended to indicate there are earlier commits
-not shown.
-
-REVSET is a string specifying the revision set to display in the log."
-  (let* ((log-data (jujutsu-log--get-log-data revset))
-         (includes-root? (-some (lambda (m) (s-equals? (ht-get m 'root) "true")) log-data)))
-    (-concat (-map #'jujutsu-log--format-log-line log-data)
-             (when (not includes-root?) (list "~")))))
+        (format "%s  %s %s %s\n"
+                node
+                change-id
+                (propertize "root()" 'face 'magit-keyword)
+                commit-id)
+      (s-join ""
+              (list
+               (format "%s  %s %s %s %s%s" node change-id author-email timestamp branches commit-id)
+               "\n"
+               (format "│  %s%s\n" empty desc))))))
 
 (provide 'jujutsu-log)
 ;;; jujutsu-log.el ends here
