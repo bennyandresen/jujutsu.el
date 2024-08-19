@@ -60,20 +60,23 @@
                 (jujutsu-status--format-status-line p-status))
         "\n"))
 
-(defun jujutsu-status--format-file-changes (change-type face files)
-  "Format file changes of CHANGE-TYPE with FACE for FILES."
-  (-map (lambda (file)
-          (concat
-           (propertize " " 'display '(left-fringe jujutsu-fringe-triangle-right))
-           (propertize
-            (format "%s %s\n%s"
-                    change-type
-                    file
-                    (propertize (format "  Details for %s:\n    (Add actual file details here)\n" file)
-                                'invisible t
-                                'details t))
-            'face face)))
-        files))
+(defun jujutsu-status--format-single-file-change (file change-type)
+  "Format a single file change for FILE with CHANGE-TYPE."
+  (let ((face (cond ((string= change-type "A") 'magit-diffstat-added)
+                    ((string= change-type "M") 'diff-changed)
+                    ((string= change-type "D") 'magit-diffstat-removed))))
+    (propertize
+     (s-concat
+      (propertize " " 'display '(left-fringe jujutsu-fringe-triangle-right))
+      (format "%s %s\n%s"
+              change-type
+              file
+              (propertize (format "    (Add actual file details here)\n" file)
+                          'invisible t
+                          'details t)))
+     'face face
+     'jj-dispatch-fn (lambda (action dom-id)
+                       (message "DISPATCH: action=%s, dom-id=%s" action dom-id)))))
 
 (defun jujutsu-status--format-working-copy-changes (all-files files-added files-modified files-deleted)
   "Format the working copy changes section."
@@ -81,16 +84,33 @@
    (if (> (length all-files) 0)
        (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face)
      (propertize "The working copy is clean\n" 'face 'font-lock-keyword-face))
-   (-concat
-    (jujutsu-status--format-file-changes "A" 'magit-diffstat-added files-added)
-    (jujutsu-status--format-file-changes "M" 'diff-changed files-modified)
-    (jujutsu-status--format-file-changes "D" 'magit-diffstat-removed files-deleted)
-    '("\n"))))
+   (if (> (length all-files) 0)
+       (let ((sorted-changes
+              (sort
+               (-concat
+                (-map (lambda (file) (cons file "A")) files-added)
+                (-map (lambda (file) (cons file "M")) files-modified)
+                (-map (lambda (file) (cons file "D")) files-deleted))
+               (lambda (a b) (string< (car a) (car b))))))
+         (-concat
+          (-map (lambda (change)
+                    (jujutsu-status--format-single-file-change (car change) (cdr change)))
+                  sorted-changes)
+          '("\n")))
+     '("\n"))))
 
 (defun jujutsu-status--format-log-section (revset)
   "Format the log section using REVSET."
-  (cons (propertize "Log:\n" 'face 'font-lock-keyword-face)
+  (cons (propertize "Log:\n"
+                    'face 'font-lock-keyword-face)
         (jujutsu-log--format-log-entries revset)))
+
+(defun jujutsu-status--hash-string (content)
+  "Generate a hash for the given CONTENT."
+  (sxhash-equal content))
+
+(defun jujutsu-status--envelope-with-hash (s)
+  (propertize s 'jj-dom-id (jujutsu-status--hash-string s)))
 
 (defun jujutsu-status ()
   "Display a summary of the current Jujutsu working copy status."
@@ -111,35 +131,12 @@
                     (ht-get wc-status 'files-deleted))
                    (jujutsu-status--format-log-section jujutsu-log-revset-fallback))
              -flatten
+             (-map #'jujutsu-status--envelope-with-hash)
              (apply #'s-concat)
              insert))
       (goto-char (point-min))
       (jujutsu-status-mode)
       (switch-to-buffer "*jujutsu-status*"))))
-
-(defun jujutsu-status--toggle-file-details ()
-  "Toggle the visibility of file details for the file at point."
-  (interactive)
-  (let ((inhibit-read-only t))
-    (save-excursion
-      (beginning-of-line)
-      (when (looking-at (rx (any "AM") " "))
-        ;; Check if we're on a file line
-        (let* ((start (point))
-               (end (save-excursion
-                      (forward-line)
-                      (while (and (not (eobp)) (looking-at (rx bos "  ")))
-                        (forward-line))
-                      (point)))
-               (details-start (1+ (line-end-position)))
-               (current-invisible (get-text-property details-start 'invisible)))
-          (when (> end start)
-            (put-text-property details-start end 'invisible (not current-invisible))
-            ;; Update the fringe indicator
-            (put-text-property start (1+ start) 'display
-                               (if current-invisible
-                                   '(left-fringe jujutsu-fringe-triangle-down)
-                                 '(left-fringe jujutsu-fringe-triangle-right)))))))))
 
 (define-derived-mode jujutsu-status-mode special-mode "jujutsu status"
   "Major mode for displaying Jujutsu status."
@@ -214,7 +211,39 @@
 (define-key jujutsu-status-mode-map (kbd "s")    #'jujutsu-status-squash-popup)
 (define-key jujutsu-status-mode-map (kbd "d")    #'jujutsu-status-describe-popup)
 (define-key jujutsu-status-mode-map (kbd "n")    #'jujutsu-status-new-popup)
-(define-key jujutsu-status-mode-map (kbd "TAB")  #'jujutsu-status--toggle-file-details)
+
+(defvar jujutsu-status-action-map
+  '((tab . toggle)
+    (return . enter))
+  "Map of user actions to symbolic action names.")
+
+(defun jujutsu-status-dispatch (&optional action-key)
+  "Dispatch function for Jujutsu status buffer based on point location and ACTION-KEY."
+  (interactive)
+  (let* ((pos (point))
+         (dom-id (get-text-property pos 'jj-dom-id))
+         (dispatch-fn (get-text-property pos 'jj-dispatch-fn))
+         (action (or (alist-get action-key jujutsu-status-action-map)
+                     action-key
+                     'default)))
+    (cond
+     (dispatch-fn
+      (funcall dispatch-fn action dom-id))
+     (dom-id
+      (message "No action defined for this line (action=%s, dom-id=%s)" action dom-id))
+     (t
+      (message "No DOM ID or dispatch-fn at point")))))
+
+(defun jujutsu-status-dispatch-return ()
+  (interactive)
+  (jujutsu-status-dispatch 'return))
+
+(defun jujutsu-status-dispatch-tab ()
+  (interactive)
+  (jujutsu-status-dispatch 'tab))
+
+(define-key jujutsu-status-mode-map (kbd "RET") #'jujutsu-status-dispatch-return)
+(define-key jujutsu-status-mode-map (kbd "TAB") #'jujutsu-status-dispatch-tab)
 
 (provide 'jujutsu-status)
 ;;; jujutsu-status.el ends here
