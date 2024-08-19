@@ -18,10 +18,9 @@
 ;;
 ;;; Code:
 (require 'jujutsu-dash)
-(require 'jujutsu-utils)
 (require 's)
 
-(defun jj--split-git-diff (diff-output)
+(defun jujutsu-diff--split-git-diff (diff-output)
   "Split DIFF-OUTPUT into separate diffs for each file."
   (let ((file-diffs '())
         (current-diff "")
@@ -39,12 +38,12 @@
 
 (-tests
  (->> "resources/test-diff-git.output"
-      jj--slurp
-      jj--split-git-diff
+      -slurp
+      jujutsu-diff--split-git-diff
       (nth 1))
  1)
 
-(defun jj--split-git-diff-into-hunks (diff-output)
+(defun jujutsu-diff--split-git-diff-into-hunks (diff-output)
   "Split DIFF-OUTPUT into hunks based on '@@' markers."
   (with-temp-buffer
     (insert diff-output)
@@ -62,14 +61,14 @@
 
 (-comment
  (->> "resources/test-diff-git.output"
-      jj--slurp
-      jj--split-git-diff
+      -slurp
+      jujutsu-diff--split-git-diff
       (nth 1)
-      jj--split-git-diff-into-hunks
+      jujutsu-diff--split-git-diff-into-hunks
       (nth 2))
  1)
 
-(defun jj--parse-diff-hunk (hunk-str)
+(defun jujutsu-diff--parse-diff-hunk (hunk-str)
   (let* ((lines (split-string hunk-str "\n"))
          (header (car lines))
          (content (cdr lines))
@@ -93,13 +92,13 @@
 
 (-tests
  (->> "resources/test-diff-git.output"
-      jj--slurp
-      jj--split-git-diff
+      -slurp
+      jujutsu-diff--split-git-diff
       (nth 1)
-      jj--split-git-diff-into-hunks
+      jujutsu-diff--split-git-diff-into-hunks
       (nth 3)
-      jj--parse-diff-hunk
-      jj--ht-to-edn-pp)
+      jujutsu-diff--parse-diff-hunk
+      jujutsu-dev--ht-to-edn-pp)
  :=
  "[{:type :header, :content \"@@ -75,7 +82,7 @@\"}
  {:type :context, :content \"        (s-split \\\"\\\\n\\\" it t)))\"}
@@ -116,7 +115,7 @@
  {:type :context, :content \"\"}]
 ")
 
-(defun jj--max-content-width (chunks type)
+(defun jujutsu-diff--max-content-width (chunks type)
   "Calculate the maximum content width for CHUNKS of given TYPE."
   (->> chunks
        (--filter (or (eq (ht-get it :type) :context)
@@ -124,18 +123,18 @@
        (--map (length (ht-get it :content)))
        (-max)))
 
-(defun jj--pad-string (s width)
+(defun jujutsu-diff--pad-string (s width)
   "Pad string S to WIDTH."
   (format (format "%%-%ds" width) (or s "")))
 
-(defun jj--format-line (left right left-width right-width separator)
+(defun jujutsu-diff--format-line (left right left-width right-width separator)
   "Format LEFT and RIGHT content with given widths (LEFT-WIDTH, RIGHT-WIDTH) and SEPARATOR."
   (let* ((left-content (ht-get left :content))
          (right-content (ht-get right :content))
          (left-type (ht-get left :type))
          (right-type (ht-get right :type))
-         (left-formatted (jj--pad-string left-content left-width))
-         (right-formatted (jj--pad-string right-content right-width))
+         (left-formatted (jujutsu-diff--pad-string left-content left-width))
+         (right-formatted (jujutsu-diff--pad-string right-content right-width))
          (is-context (and (eq left-type :context) (eq right-type :context))))
     (concat
      (if is-context
@@ -146,11 +145,11 @@
          (propertize right-formatted 'face 'magit-diff-context)
        (propertize right-formatted 'face 'magit-diff-added-highlight)))))
 
-(defun jj--format-header (content total-width)
+(defun jujutsu-diff--format-header (content total-width)
   "Format header CONTENT to TOTAL-WIDTH."
-  (propertize (jj--pad-string content total-width) 'face 'magit-diff-hunk-heading))
+  (propertize (jujutsu-diff--pad-string content total-width) 'face 'magit-diff-hunk-heading))
 
-(defun jj--process-chunk (acc chunk left-width right-width separator)
+(defun jujutsu-diff--process-chunk (acc chunk left-width right-width separator)
   "Process a single CHUNK, updating the accumulator ACC."
   (let ((formatted (car acc))
         (removed (cdr acc))
@@ -158,55 +157,56 @@
         (content (ht-get chunk :content)))
     (pcase type
       (:header
-       (cons (cons (jj--format-header content (+ left-width (length separator) right-width))
+       (cons (cons (jujutsu-diff--format-header content (+ left-width (length separator) right-width))
                    formatted)
              removed))
       (:context
-       (cons (cons (jj--format-line chunk chunk left-width right-width separator)
+       (cons (cons (jujutsu-diff--format-line chunk chunk left-width right-width separator)
                    formatted)
              removed))
       (:removed
        (cons formatted (cons chunk removed)))
       (:added
        (if (null removed)
-           (cons (cons (jj--format-line (ht-create) chunk left-width right-width separator)
+           (cons (cons (jujutsu-diff--format-line (ht-create) chunk left-width right-width separator)
                        formatted)
                  removed)
-         (cons (cons (jj--format-line (car removed) chunk left-width right-width separator)
+         (cons (cons (jujutsu-diff--format-line (car removed) chunk left-width right-width separator)
                      formatted)
                (cdr removed)))))))
 
-(defun jj--create-side-by-side-diff (diff-git-chunk)
+(defun jujutsu-diff--create-side-by-side-diff (diff-git-chunk)
   "Create a side-by-side diff representation from DIFF-GIT-CHUNK."
-  (let* ((left-width (jj--max-content-width diff-git-chunk :removed))
-         (right-width (jj--max-content-width diff-git-chunk :added))
+  (let* ((left-width (jujutsu-diff--max-content-width diff-git-chunk :removed))
+         (right-width (jujutsu-diff--max-content-width diff-git-chunk :added))
          (separator " ")
          (initial-acc (cons nil nil))  ; (formatted-lines . removed-lines)
          (result-and-removed
           (-reduce-from
            (lambda (acc chunk)
-             (jj--process-chunk acc chunk left-width right-width separator))
+             (jujutsu-diff--process-chunk acc chunk left-width right-width separator))
            initial-acc
            diff-git-chunk))
          (formatted-lines (car result-and-removed))
          (remaining-removed (cdr result-and-removed)))
     (-concat
      (nreverse formatted-lines)
-     (--map (jj--format-line it (ht-create) left-width right-width separator)
+     (--map (jujutsu-diff--format-line it (ht-create) left-width right-width separator)
             remaining-removed))))
 
 (-comment
  (with-current-buffer "*jj debug*"
    (erase-buffer)
    (->> "resources/test-diff-git.output"
-        jj--slurp
-        jj--split-git-diff
+        -slurp
+        jujutsu-diff--split-git-diff
         (nth 1)
-        jj--split-git-diff-into-hunks
+        jujutsu-diff--split-git-diff-into-hunks
         (nth 2)
-        jj--parse-diff-hunk
-        jj--create-side-by-side-diff6
-        (-map (lambda (s) (insert s) (insert "\n")))))
+        jujutsu-diff--parse-diff-hunk
+        jujutsu-diff--create-side-by-side-diff
+        (-map (lambda (s) (insert s) (insert "\n"))))
+   (display-buffer "*jj debug*"))
  1)
 
 (provide 'jujutsu-diff)

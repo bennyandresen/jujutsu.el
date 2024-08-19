@@ -72,7 +72,12 @@ It returns a string summarizing the test results."
 (defun -tests-enable! ()
   (setq jujutsu-dash-tests-enabled t))
 
-
+(defun -slurp (filename)
+  (with-temp-buffer
+    (insert-file-contents filename)
+    (buffer-substring-no-properties
+     (point-min)
+     (point-max))))
 
 (provide 'jujutsu-dash)
 ;;; jujutsu-dash.el ends here
