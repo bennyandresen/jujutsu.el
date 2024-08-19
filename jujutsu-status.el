@@ -23,6 +23,7 @@
 (require 's)
 (require 'ht)
 
+(require 'nx)
 (require 'jujutsu-formatting)
 (require 'jujutsu-core)
 (require 'jujutsu-log)
@@ -143,52 +144,40 @@
 (define-key jujutsu-status-mode-map (kbd "d")    #'jujutsu-status-describe-popup)
 (define-key jujutsu-status-mode-map (kbd "n")    #'jujutsu-status-new-popup)
 
-;; Define a node structure
-(defun make-jj-node (type &optional props children)
-  (ht (:type type)
-      (:props props)
-      (:children children)))
-
-;; Create the initial tree structure
-(defun make-jj-tree ()
+(defun jujutsu-status--make-tree ()
+  "Construct the complete Jujutsu status tree structure.
+Returns a tree representation of the current Jujutsu repository status,
+including working copy status, parent commit status, and log entries."
   (let* ((wc-status (jujutsu-core--get-status-data "@"))
          (p-status (jujutsu-core--get-status-data "@-"))
          (all-files (-concat (ht-get wc-status :files-added)
                              (ht-get wc-status :files-modified)
                              (ht-get wc-status :files-deleted))))
-    (make-jj-node
-     :root
-     nil
+    (nx :root (ht)
      (list
-      (make-jj-node
-       :status-section
-       nil
+      (nx :status-section (ht)
        (list
-        (make-jj-node
-         :status-header
-         nil
+        (nx :status-header (ht)
          (list
-          (make-jj-node :text (propertize "Working copy : " 'face 'font-lock-type-face))
-          (make-jj-node :working-copy-status wc-status)
-          (make-jj-node :newline)
-          (make-jj-node :text (propertize "Parent commit: " 'face 'font-lock-type-face))
-          (make-jj-node :parent-commit-status p-status)
-          (make-jj-node :newline)))
-        (make-jj-node :newline)
-        (make-jj-node
-         :working-copy-changes-header
-         nil
+          (nx :text (ht (:text "Working copy :")
+                                  (:face 'font-lock-type-face)))
+          (nx :working-copy-status wc-status)
+          (nx :newline)
+          (nx :text (ht (:text "Parent commit: ")
+                                  (:face 'font-lock-type-face)))
+          (nx :parent-commit-status p-status)
+          (nx :newline)))
+        (nx :newline)
+        (nx :working-copy-changes-header (ht)
          (list
-          (make-jj-node
-           :text
-           (if (> (length all-files) 0)
-               (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face)
-             (propertize "The working copy is clean\n" 'face 'font-lock-keyword-face)))
-          (make-jj-node
-           :working-copy-changes
-           nil
+          (nx :text (ht (:text (if (> (length all-files) 0)
+                          "Working copy changes:"
+                        "The working copy is clean"))
+               (:face 'font-lock-keyword-face)))
+          (nx :newline)
+          (nx :working-copy-changes (ht)
            (-map (lambda (file)
-                   (make-jj-node :file-change
+                   (nx :file-change
                                  (ht (:file file)
                                      (:type (cond
                                              ((member file (ht-get wc-status :files-added)) "A")
@@ -197,115 +186,136 @@
                                      (:expanded nil))
                                  nil))
                  all-files))))))
-      (make-jj-node :newline)
+      (nx :newline)
       (let* ((lentries (jujutsu-log--get-log-entries jujutsu-log-revset-fallback))
              (includes-root? (-some (lambda (m) (s-equals? (ht-get m :root) "true")) lentries)))
-        (make-jj-node
-         :log-section
-         nil
+        (nx :log-section (ht)
          (-concat
-          (list (make-jj-node :log-section-header (ht (:text "Log:")
+          (list (nx :log-section-header (ht (:text "Log:")
                                                       (:upcase nil)))
-                (make-jj-node :newline))
+                (nx :newline))
           (-map (lambda (entry)
-                  (make-jj-node :log-entry entry nil))
+                  (nx :log-entry entry nil))
                 lentries)
-          (when (not includes-root?) (list (make-jj-node :text "~"))))))))))
+          (when (not includes-root?) (list (nx :verbatim "~"))))))))))
 
 (-comment
  (with-current-buffer (get-buffer-create "*jj debug*")
+   (fundamental-mode)
    (erase-buffer)
-   (->> (make-jj-tree)
+   (->> (jujutsu-status--make-tree)
         jujutsu-dev--ht-to-edn-pp
         insert)
+   (clojure-mode)
    (display-buffer "*jj debug*"))
  1)
 
-(defun render-jj-tree (tree)
-  (render-node tree ""))
+(defun jujutsu-status--render-tree (tree)
+  "Render the Jujutsu TREE structure as a string.
+TREE is the root node of the Jujutsu status tree."
+  (jujutsu-status--render-node tree ""))
 
-(defun render-node (node result)
-  (-let* [((&hash :type type
-                  :props props
-                  :children children)
-           node)
+(defun jujutsu-status--render-node (node result)
+  "Recursively render a NODE and its children, appending to RESULT.
+NODE is the current node being rendered.
+RESULT is the accumulated string of rendered nodes."
+  (-let* [((&hash :type type :props props :children children) node)
           (content
-                   (cond
-                    ((eq type :working-copy-status)
-                     (jujutsu-status--format-status-line props))
-                    ((eq type :parent-commit-status)
-                     (jujutsu-status--format-status-line props))
-                    ((eq type :newline)
-                     "\n")
-                    ((eq type :text)
-                     props) ;; props as text
-                    ((eq type :log-section-header)
-                     (-let* [((&hash :upcase upcase
-                                     :text text)
-                              props)
-                             (text (if upcase (s-upcase text) text))]
-                       (propertize text 'face 'font-lock-keyword-face)))
-                    ((eq type :file-change)
-                     (-let* [((&hash :file file
-                                     :type type)
-                              props)]
-                       (jujutsu-status--format-single-file-change
-                        file
-                        type)))
-                    ((eq type :log-entry)
-                     (jujutsu-log--format-log-entry props))
-                    (t "")))
-           (updated-result
-            (concat
-             result
-             (propertize content
-                         'jj-dom-id (sxhash-equal node))))]
+           (pcase type
+             (:working-copy-status
+              (jujutsu-status--format-status-line props))
+             (:parent-commit-status
+              (jujutsu-status--format-status-line props))
+             (:newline "\n")
+             (:verbatim props)
+             (:text
+              (-let* [((&hash :text text :face face) props)]
+                (propertize text 'face face)))
+             (:log-section-header
+              (-let* [((&hash :upcase upcase :text text) props)
+                      (text (if upcase (s-upcase text) text))]
+                (propertize text 'face 'font-lock-keyword-face)))
+             (:file-change
+              (-let* [((&hash :file file :type change-type) props)]
+                (jujutsu-status--format-single-file-change file change-type)))
+             (:log-entry
+              (jujutsu-log--format-log-entry props))
+             (_ "")))
+          (updated-result
+           (concat
+            result
+            (propertize content 'jj-dom-id (sxhash-equal node))))]
     (if children
-        (-reduce-from (lambda (acc child) (render-node child acc))
+        (-reduce-from (lambda (acc child) (jujutsu-status--render-node child acc))
                       updated-result
                       children)
       updated-result)))
 
-;; Update the tree based on user action
-(defun update-jj-tree (tree dom-id action)
-  (update-node tree dom-id action))
-
-(defun update-node (node dom-id action)
+(defun jujutsu-status--update-node (node dom-id action)
+  "Recursively update a NODE or its children based on DOM-ID and ACTION.
+NODE is the current node being checked.
+DOM-ID is the unique identifier of the node to update.
+ACTION is the user action to apply to the node."
   (let ((node-id (sxhash-equal node)))
     (if (equal node-id dom-id)
-        (update-node-by-action node action)
-      (let* ((children (ht-get node :children))
-             (updated-children (-map (lambda (child) (update-node child dom-id action)) children)))
+        (jujutsu-status--update-node-by-action node action)
+      (-let* [((&hash :children children) node)
+              (updated-children (-map (lambda (child) (jujutsu-status--update-node child dom-id action)) children))]
         (if (equal updated-children children)
             node
           (ht-set node :children updated-children)
           node)))))
 
-(defun update-node-by-action (node action)
-  (let* ((type (ht-get node :type))
-         (props (ht-get node :props)))
+(defun jujutsu-status--update-tree (tree dom-id action)
+  "Update the Jujutsu TREE based on user ACTION at DOM-ID.
+TREE is the current Jujutsu status tree.
+DOM-ID is the unique identifier of the node to update.
+ACTION is the user action to apply to the node."
+  (jujutsu-status--update-node tree dom-id action))
+
+
+(defun jujutsu-status--update-node-by-action (node action)
+  "Apply ACTION to NODE, updating its state accordingly.
+NODE is the node to update.
+ACTION is the user action to apply."
+  (-let* [((&hash :type type :props props) node)]
     (message "DEBUG: type=%s, props=%s" type props)
-    (cond
-     ((and (eq type :file-change) (eq action 'toggle))
-      (ht-set props :expanded (not (ht-get props :expanded)))
-      node)
-     ((and (eq type :log-section-header) (eq action 'toggle))
-      (-let* [((&hash :upcase upcase) props)]
-        (ht-set props :upcase (not upcase)))
-      node)
-     (t node))))
+     (cond
+      ((and (eq type :file-change) (eq action 'toggle))
+       (ht-set props :expanded (not (ht-get props :expanded)))
+       node)
+      ((and (eq type :log-section-header) (eq action 'toggle))
+       (-let* [((&hash :upcase upcase) props)]
+         (ht-set props :upcase (not upcase)))
+       node)
+      (t node))))
 
 (defvar-local jujutsu-status-tree nil
   "Buffer-local variable to store the tree state.")
 
 (defun jujutsu-status ()
+  "Display the status of the current Jujutsu repository.
+
+This command opens a new buffer named *jujutsu-status* showing:
+- The working copy status
+- The parent commit status
+- A list of changes in the working copy
+- A log of recent commits
+
+The status buffer is interactive, allowing you to:
+- Toggle file details with TAB
+- Perform actions on commits or files with RET
+- Use `g' to refresh the status
+- Access additional commands via the `?' key
+
+This provides a comprehensive overview of your repository's current state."
   (interactive)
   (with-current-buffer (get-buffer-create "*jujutsu-status*")
     (let ((inhibit-read-only t))
       (erase-buffer)
       (jujutsu-status-mode)
-      (setq-local jujutsu-status-tree (make-jj-tree))  ; Set the buffer-local variable
-      (insert (render-jj-tree jujutsu-status-tree)))
+      (setq-local jujutsu-status-tree (jujutsu-status--make-tree))  ; Set the buffer-local variable
+      (insert (jujutsu-status--render-tree jujutsu-status-tree)))
     (goto-char (point-min))
     (setq-local jujutsu-status-current-dom-id nil)  ; Initialize the buffer-local variable
     (switch-to-buffer "*jujutsu-status*")))
@@ -320,6 +330,8 @@
 
 ;; Dispatch function for user actions
 (defun jujutsu-status-dispatch (action-key)
+  "Dispatch a user action based on ACTION-KEY in the Jujutsu status buffer.
+ACTION-KEY is the key representing the user action (e.g., `tab, `return)."
   (interactive)
   (let* ((pos (point))
          (dom-id (get-text-property pos 'jj-dom-id))
@@ -327,10 +339,10 @@
     (when (and dom-id action)
       (message "DEBUG: action=%s, action-key=%s, dom-id=%s" action action-key dom-id)
       (setq jujutsu-status-current-dom-id dom-id)
-      (setq-local jujutsu-status-tree (update-jj-tree jujutsu-status-tree dom-id action))
+      (setq-local jujutsu-status-tree (jujutsu-status--update-tree jujutsu-status-tree dom-id action))
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert (render-jj-tree jujutsu-status-tree))
+        (insert (jujutsu-status--render-tree jujutsu-status-tree))
         (goto-char (point-min))
         (if-let ((new-pos (text-property-any (point-min) (point-max) 'jj-dom-id jujutsu-status-current-dom-id)))
             (goto-char new-pos)

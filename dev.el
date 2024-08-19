@@ -24,3 +24,14 @@ replaced with the new output each time this function is called."
     (erase-buffer)
     (insert (jujutsu-dev--ht-to-edn-pp x))
     (display-buffer (current-buffer))))
+
+(defun jujutsu-dev-dump-tree ()
+  (interactive)
+  (let ((current-tree jujutsu-status-tree))
+    (with-current-buffer (get-buffer-create "*jj debug*")
+      (fundamental-mode)
+      (erase-buffer)
+      (-> current-tree
+          jujutsu-dev--ht-to-edn-pp
+          insert)
+      (clojure-mode))))
