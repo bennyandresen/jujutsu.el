@@ -266,86 +266,93 @@ not shown.
 
 REVSET is a string specifying the revision set to display in the log."
   (let* ((log-data (jj--get-log-data revset))
-         (includes-root? (-some (lambda (m) (string= (ht-get m 'root) "true")) log-data)))
+         (includes-root? (-some (lambda (m) (s-equals? (ht-get m 'root) "true")) log-data)))
     (-concat (-map #'jj--format-log-line log-data)
              (when (not includes-root?) (list "~")))))
 
-  (define-fringe-bitmap 'jujutsu-fringe-triangle-right
-    [#b01100000
-     #b00110000
-     #b00011000
-     #b00001100
-     #b00011000
-     #b00110000
-     #b01100000
-     #b00000000])
+(define-fringe-bitmap 'jujutsu-fringe-triangle-right
+  [#b01100000
+   #b00110000
+   #b00011000
+   #b00001100
+   #b00011000
+   #b00110000
+   #b01100000
+   #b00000000])
 
-  (define-fringe-bitmap 'jujutsu-fringe-triangle-down
-    [#b00000000
-     #b10000010
-     #b11000110
-     #b01101100
-     #b00111000
-     #b00010000
-     #b00000000
-     #b00000000])
+(define-fringe-bitmap 'jujutsu-fringe-triangle-down
+  [#b00000000
+   #b10000010
+   #b11000110
+   #b01101100
+   #b00111000
+   #b00010000
+   #b00000000
+   #b00000000])
+
+(defun jujutsu-format-status-header (wc-status p-status)
+  "Format the status header with working copy and parent commit information."
+  (list (format "%s %s\n"
+                (propertize "Working copy :" 'face 'font-lock-type-face)
+                (jj--format-status-line wc-status))
+        (format "%s %s\n"
+                (propertize "Parent commit:" 'face 'font-lock-type-face)
+                (jj--format-status-line p-status))
+        "\n"))
+
+(defun jujutsu-format-working-copy-changes (all-files files-added files-modified files-deleted)
+  "Format the working copy changes section."
+  (cons
+   (if (> (length all-files) 0)
+       (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face)
+     (propertize "The working copy is clean\n" 'face 'font-lock-keyword-face))
+   (-concat
+    (jujutsu-format-file-changes "A" 'magit-diffstat-added files-added)
+    (jujutsu-format-file-changes "M" 'diff-changed files-modified)
+    (jujutsu-format-file-changes "D" 'magit-diffstat-removed files-deleted)
+    '("\n"))))
+
+(defun jujutsu-format-file-changes (change-type face files)
+  "Format file changes of CHANGE-TYPE with FACE for FILES."
+  (-map (lambda (file)
+          (concat
+           (propertize " " 'display '(left-fringe jujutsu-fringe-triangle-right))
+           (propertize
+            (format "%s %s\n%s"
+                    change-type
+                    file
+                    (propertize (format "  Details for %s:\n    (Add actual file details here)\n" file)
+                                'invisible t
+                                'details t))
+            'face face)))
+        files))
+
+(defun jujutsu-format-log-section (revset)
+  "Format the log section using REVSET."
+  (cons (propertize "Log:\n" 'face 'font-lock-keyword-face)
+        (jj--format-log-entries revset)))
 
 (defun jujutsu-status ()
   "Display a summary of the current Jujutsu working copy status."
   (interactive)
-  (-let* ((wc-status (jj--get-status-data "@"))
-          (p-status (jj--get-status-data "@-"))
-          ((&hash 'files-added files-added
-                  'files-modified files-modified
-                  'files-deleted files-deleted)
-           wc-status)
-          (all-files (-concat files-added files-modified files-deleted)))
+  (let* ((wc-status (jj--get-status-data "@"))
+         (p-status (jj--get-status-data "@-"))
+         (all-files (-concat (ht-get wc-status 'files-added)
+                             (ht-get wc-status 'files-modified)
+                             (ht-get wc-status 'files-deleted))))
     (with-current-buffer (get-buffer-create "*jujutsu-status*")
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (->>
-         (list (format "%s %s\n"
-                       (propertize "Working copy :" 'face 'font-lock-type-face)
-                       (jj--format-status-line wc-status))
-               (format "%s %s\n"
-                       (propertize "Parent commit:" 'face 'font-lock-type-face)
-                       (jj--format-status-line p-status))
-               "\n"
-               (if (> (length all-files) 0)
-                   (propertize "Working copy changes:\n" 'face 'font-lock-keyword-face)
-                 (propertize "The working copy is clean\n" 'face 'font-lock-keyword-face))
-               (-map (lambda (added-file)
-                       (concat
-                        (propertize " " 'display '(left-fringe jujutsu-fringe-triangle-right))
-                        (propertize
-                         (format "A %s\n%s"
-                                 added-file
-                                 (propertize (format "  Details for %s:\n    (Add actual file details here)\n" added-file)
-                                             'invisible t
-                                             'details t))
-                         'face 'magit-diffstat-added)))
-                     files-added)
-               (-map (lambda (modified-file)
-                       (concat
-                        (propertize " " 'display '(left-fringe jujutsu-fringe-triangle-right))
-                        (propertize
-                         (format "M %s\n%s"
-                                 modified-file
-                                 (propertize (format "  Details for %s:\n    (Add actual file details here)\n" modified-file)
-                                             'invisible t
-                                             'details t))
-                         'face 'diff-changed)))
-                     files-modified)
-               (-map (lambda (deleted-file) (propertize (format "D %s\n" deleted-file)
-                                                   'face
-                                                   'magit-diffstat-removed))
-                     files-deleted)
-               "\n"
-               (propertize "Log:\n" 'face 'font-lock-keyword-face)
-               (jj--format-log-entries jujutsu-log-revset-fallback))
-         -flatten
-         (apply #'s-concat)
-         insert))
+        (->> (list (jujutsu-format-status-header wc-status p-status)
+                   (jujutsu-format-working-copy-changes
+                    all-files
+                    (ht-get wc-status 'files-added)
+                    (ht-get wc-status 'files-modified)
+                    (ht-get wc-status 'files-deleted))
+                   (jujutsu-format-log-section jujutsu-log-revset-fallback))
+             -flatten
+             (apply #'s-concat)
+             insert))
       (goto-char (point-min))
       (jujutsu-status-mode)
       (switch-to-buffer "*jujutsu-status*"))))
@@ -356,11 +363,12 @@ REVSET is a string specifying the revision set to display in the log."
   (let ((inhibit-read-only t))
     (save-excursion
       (beginning-of-line)
-      (when (looking-at "^\\s-*[AM] ")  ; Check if we're on a file line
+      (when (looking-at (rx bos (zero-or-more space) (any "AM") " "))
+        ;; Check if we're on a file line
         (let* ((start (point))
                (end (save-excursion
                       (forward-line)
-                      (while (and (not (eobp)) (looking-at "^  "))
+                      (while (and (not (eobp)) (looking-at (rx bos "  ")))
                         (forward-line))
                       (point)))
                (details-start (1+ (line-end-position)))
