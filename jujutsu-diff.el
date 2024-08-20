@@ -22,6 +22,17 @@
 (require 'ht)
 (require 's)
 
+(defun jujutsu-diff--run (filename &optional revision)
+  (let ((revision (or revision "@")))
+    (jujutsu-core--run-command
+     (s-join " " (list "diff" "-r" revision "--git" filename)))))
+
+(-comment
+
+ (jujutsu-diff--run "jujutsu-status.el")
+
+ )
+
 (defun jujutsu-diff--split-git-diff-by-file (diff-output)
   "Split DIFF-OUTPUT into separate diffs for each file."
   (let ((file-diffs '())
@@ -151,7 +162,8 @@ parsed diff content."
              (header (car lines))
              (content (s-join "\n" (cdr lines))))
         (when (s-starts-with? "@@ " header)
-          (ht-set! result header
+          (ht-set! result
+                   header
                    (jujutsu-diff--parse-diff-hunk content)))))
     result))
 
