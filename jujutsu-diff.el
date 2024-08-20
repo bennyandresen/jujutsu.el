@@ -197,14 +197,12 @@ parsed diff content."
   (format (format "%%-%ds" width) (or s "")))
 
 (defun jujutsu-diff--format-line (left right left-width right-width separator)
-  "Format LEFT and RIGHT content with given widths (LEFT-WIDTH, RIGHT-WIDTH) and SEPARATOR."
-  (let* ((left-content (ht-get left :content))
-         (right-content (ht-get right :content))
-         (left-type (ht-get left :type))
-         (right-type (ht-get right :type))
-         (left-formatted (jujutsu-diff--pad-string left-content left-width))
-         (right-formatted (jujutsu-diff--pad-string right-content right-width))
-         (is-context (and (eq left-type :context) (eq right-type :context))))
+  "Format LEFT and RIGHT content with given widths (LEFT-WIDTH,RIGHT-WIDTH) and SEPARATOR."
+  (-let* [((&hash :content left-content :type left-type) left)
+          ((&hash :content right-content :type right-type) right)
+          (left-formatted (jujutsu-diff--pad-string left-content left-width))
+          (right-formatted (jujutsu-diff--pad-string right-content right-width))
+          (is-context (and (eq left-type :context ) (eq right-type :context)))]
     (concat
      (if is-context
          (propertize left-formatted 'face 'magit-diff-context)

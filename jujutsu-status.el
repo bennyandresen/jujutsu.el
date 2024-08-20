@@ -27,6 +27,7 @@
 (require 'jujutsu-formatting)
 (require 'jujutsu-core)
 (require 'jujutsu-log)
+(require 'jujutsu-diff)
 
 (defun jujutsu-status--format-status-line (data)
   "Format a status line using DATA with fontification."
