@@ -59,7 +59,7 @@
                   :commit-id-short coids :commit-id-shortest coidss
                   :branches branches :empty empty :description desc
                   :root root :author-email author-email
-                  :timestamp timestamp ':mmutable immutable
+                  :timestamp timestamp :immutable immutable
                   :current-working-copy cwc)
            data)
           (node (cond ((s-equals? cwc "true")
