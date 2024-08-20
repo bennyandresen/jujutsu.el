@@ -18,9 +18,11 @@
 ;;
 ;;; Code:
 (require 'jujutsu-dash)
+(require 'dash)
+(require 'ht)
 (require 's)
 
-(defun jujutsu-diff--split-git-diff (diff-output)
+(defun jujutsu-diff--split-git-diff-by-file (diff-output)
   "Split DIFF-OUTPUT into separate diffs for each file."
   (let ((file-diffs '())
         (current-diff "")
@@ -39,9 +41,43 @@
 (-tests
  (->> "resources/test-diff-git.output"
       -slurp
-      jujutsu-diff--split-git-diff
-      (nth 1))
+      jujutsu-diff--split-git-diff-by-file
+      (nth 0))
  1)
+
+(defun jujutsu-diff--parse-diffs (diff-lst)
+  "Parse a list of git diff outputs DIFF-LST into a hash table.
+Each entry in the hash table will contain the filename, metadata,
+and diff content."
+  (let ((result (ht-create)))
+    (dolist (diff diff-lst)
+      (let* ((lines (s-split "\n" diff))
+             (filename-line (car lines))
+             (filename (when (string-match "^diff --git a/\\(.+\\) b/\\1$" filename-line)
+                         (match-string 1 filename-line)))
+             (metadata-end (--find-index (s-starts-with? "@@" it) lines))
+             (metadata (when metadata-end
+                         (-slice lines 1 metadata-end)))
+             (diff-content (when metadata-end
+                             (-slice lines metadata-end))))
+        (when filename
+          (ht-set! result filename
+                   (ht (:metadata metadata)
+                       (:diff-content (s-join "\n" diff-content)))))))
+    result))
+
+(-tests
+ (--> "resources/test-diff-git.output"
+      -slurp
+      jujutsu-diff--split-git-diff-by-file
+      jujutsu-diff--parse-diffs
+      (ht-get it "jujutsu.el")
+      (ht-get it :metadata))
+ :=
+ '("index 5b32d77748...1aa38bdebf 100644"
+   "--- a/jujutsu.el"
+   "+++ b/jujutsu.el"))
+
 
 (defun jujutsu-diff--split-git-diff-into-hunks (diff-output)
   "Split DIFF-OUTPUT into hunks based on '@@' markers."
@@ -60,22 +96,18 @@
       (nreverse hunks))))
 
 (-comment
- (->> "resources/test-diff-git.output"
+ (--> "resources/test-diff-git.output"
       -slurp
       jujutsu-diff--split-git-diff
-      (nth 1)
-      jujutsu-diff--split-git-diff-into-hunks
-      (nth 2))
+      jujutsu-diff--parse-diffs
+      (ht-get* it "jujutsu.el" :diff-content)
+      jujutsu-diff--split-git-diff-into-hunks)
  1)
 
-(defun jujutsu-diff--parse-diff-hunk (hunk-str)
-  (let* ((lines (split-string hunk-str "\n"))
-         (header (car lines))
-         (content (cdr lines))
-         (result (list (ht-create))))
-    (ht-set! (car result) :type :header)
-    (ht-set! (car result) :content header)
-    (dolist (line content)
+(defun jujutsu-diff--parse-diff-hunk (hunk-content)
+  "Parse the HUNK-CONTENT into a list of hash-tables, excluding the header."
+  (let ((result '()))
+    (dolist (line (s-lines hunk-content))
       (let ((entry (ht-create)))
         (cond
          ((string-prefix-p "-" line)
@@ -91,29 +123,66 @@
     (nreverse result)))
 
 (-tests
- (->> "resources/test-diff-git.output"
+ (-->
+  "        (s-split \"\\n\" it t)))
+
+ (defun jj--map-to-escaped-string (map)
+-  \"Convert MAP (hash-table) to an escaped string.\"
++  \"Convert MAP (hash-table) to an escaped string for use as a jj template.\"
+   (->> map
+        (ht-map (lambda (key value)
+                  (format \"\\\"%s \\\" ++ %s ++ \\\"\\\\n\\\"\"
+"
+  jujutsu-diff--parse-diff-hunk
+  (nth 0 it)
+  ;; because of ht-equality specialness just a single map is checked.
+  (ht-equal? it
+             (ht (:type :context)
+                 (:content "        (s-split \"\\n\" it t)))"))))
+ := t)
+
+(defun jujutsu-diff--parse-hunks (hunks)
+  "Parse a list of HUNKS into a hash-table.
+Each entry in the hash-table will contain the hunk header and the
+parsed diff content."
+  (let ((result (ht-create)))
+    (dolist (hunk hunks)
+      (let* ((lines (s-split "\n" hunk))
+             (header (car lines))
+             (content (s-join "\n" (cdr lines))))
+        (when (s-starts-with? "@@ " header)
+          (ht-set! result header
+                   (jujutsu-diff--parse-diff-hunk content)))))
+    result))
+
+(-comment
+
+(--> "resources/test-diff-git.output"
+     -slurp
+     jujutsu-diff--split-git-diff-by-file
+     jujutsu-diff--parse-diffs
+     (ht-get* it "jujutsu.el" :diff-content)
+     jujutsu-diff--split-git-diff-into-hunks
+     jujutsu-diff--parse-hunks
+     ht-keys
+     random)
+ )
+
+(-tests
+ (--> "resources/test-diff-git.output"
       -slurp
-      jujutsu-diff--split-git-diff
-      (nth 1)
+      jujutsu-diff--split-git-diff-by-file
+      jujutsu-diff--parse-diffs
+      (ht-get* it "jujutsu.el" :diff-content)
       jujutsu-diff--split-git-diff-into-hunks
-      (nth 3)
-      jujutsu-diff--parse-diff-hunk
-      jujutsu-dev--ht-to-edn-pp)
- :=
- "[{:type :header, :content \"@@ -75,7 +82,7 @@\"}
- {:type :context, :content \"        (s-split \\\"\\\\n\\\" it t)))\"}
- {:type :context, :content \"\"}
- {:type :context, :content \" (defun jj--map-to-escaped-string (map)\"}
- {:type :removed,
-  :content \"  \\\"Convert MAP (hash-table) to an escaped string.\\\"\"}
- {:type :added,
-  :content \"  \\\"Convert MAP (hash-table) to an escaped string for use as a jj template.\\\"\"}
- {:type :context, :content \"   (->> map\"}
- {:type :context, :content \"        (ht-map (lambda (key value)\"}
- {:type :context,
-  :content \"                  (format \\\"\\\\\\\\\\\\\\\"%s \\\\\\\\\\\\\\\" ++ %s ++ \\\\\\\\\\\\\\\"\\\\\\\\\\\\\\\\n\\\\\\\\\\\\\\\"\\\"\"}
- {:type :context, :content \"\"}]
-")
+      jujutsu-diff--parse-hunks
+      (ht-get it "@@ -75,7 +82,7 @@")
+      (nth 3 it)
+      (ht-equal?
+       it
+       (ht (:type :removed)
+           (:content "  \"Convert MAP (hash-table) to an escaped string.\""))))
+ := t)
 
 (defun jujutsu-diff--max-content-width (chunks type)
   "Calculate the maximum content width for CHUNKS of given TYPE."
@@ -195,18 +264,25 @@
             remaining-removed))))
 
 (-comment
- (with-current-buffer "*jj debug*"
-   (erase-buffer)
-   (->> "resources/test-diff-git.output"
-        -slurp
-        jujutsu-diff--split-git-diff
-        (nth 1)
-        jujutsu-diff--split-git-diff-into-hunks
-        (nth 2)
-        jujutsu-diff--parse-diff-hunk
-        jujutsu-diff--create-side-by-side-diff
-        (-map (lambda (s) (insert s) (insert "\n"))))
-   (display-buffer "*jj debug*"))
+ ;; for demo purposes only
+ (let* ((hunks (--> "resources/test-diff-git.output"
+                    -slurp
+                    jujutsu-diff--split-git-diff-by-file
+                    jujutsu-diff--parse-diffs
+                    (ht-get* it "jujutsu.el" :diff-content)
+                    jujutsu-diff--split-git-diff-into-hunks
+                    jujutsu-diff--parse-hunks))
+        (hunk-keys (ht-keys hunks))
+        (len (length hunk-keys))
+        (rand (random len)))
+   (with-current-buffer (get-buffer-create "*jj debug*")
+     (fundamental-mode)
+     (erase-buffer)
+     (--> hunks
+          (ht-get it (nth rand hunk-keys))
+          jujutsu-diff--create-side-by-side-diff
+          (-map (lambda (s) (insert s) (insert "\n")) it))
+     (display-buffer "*jj debug*")))
  1)
 
 (provide 'jujutsu-diff)
