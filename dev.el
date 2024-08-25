@@ -40,6 +40,10 @@
 
 (defvar jujutsu-dev-dump-user-actions nil)
 
+(-comment
+ (setq jujutsu-dev-dump-user-actions (not jujutsu-dev-dump-user-actions))
+ 1)
+
 (defun jujutsu-dev--display-in-buffer (x)
   "Display the pretty-printed EDN representation of X in the *jj debug* buffer.
 If the buffer doesn't exist, it will be created. The buffer's content is

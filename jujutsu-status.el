@@ -181,18 +181,17 @@ Returns a formatted string with appropriate text properties."
   ["Actions"
    ("d" "Describe" jujutsu-status-describe)])
 
-(defun jujutsu-status--get-metadata-at-point (point)
+(defun jujutsu-status--get-props-at-point (point)
   "Get metadata for the node at POINT in the jujutsu status buffer."
   (let* ((dom-id (get-text-property point 'nx/id))
          (node (when dom-id
                  (jujutsu-status--find-node-by-id jujutsu-status-app-state dom-id))))
-    (when node
-      (jujutsu-status--extract-node-metadata node))))
+    (when node (ht-get node :props))))
 
 (transient-define-prefix jujutsu-status-squash-popup ()
   "Popup for jj squash options, with context from current buffer position."
   :init-value (lambda (obj)
-                (let ((metadata (jujutsu-status--get-metadata-at-point (point))))
+                (let ((metadata (jujutsu-status--get-props-at-point (point))))
                   (oset obj value (list
                                    (when (ht-get metadata :filename)
                                      (format "--file=%s" (ht-get metadata :filename)))
@@ -215,6 +214,28 @@ Returns a formatted string with appropriate text properties."
   ["Actions"
    ("s" "Squash" jujutsu-status-squash)])
 
+(transient-define-prefix jujutsu-status-branch-popup ()
+  "Popup for jj branch options."
+  ["Actions"
+   ;; ("c" "Create" jujutsu-status-branch-create-popup)
+   ("s" "Set" jujutsu-status-branch-set-popup)])
+
+(transient-define-prefix jujutsu-status-branch-set-popup ()
+  "Popup for \"jj branch set\" options."
+  :init-value (lambda (obj)
+                (-let* [(node-props (jujutsu-status--get-props-at-point (point)))
+                        ((&hash :change-id-shortest chidst) node-props)]
+                  (oset obj value (list
+                                   (when chidst (format "--revision=%s" chidst))))))
+  ["Options"
+   ("-r" "Revision" "--revision=" :reader (lambda (&rest _args) (s-concat "\"" (read-string "-r ") "\"")))]
+  ["Actions"
+   ("s" "Set" jujutsu-status-branch-set)])
+
+(defun jujutsu-status-branch-set (args)
+  (interactive (list (transient-args 'jujutsu-status-branch-set-popup)))
+  (message "NOT IMPLEMENTED YET"))
+
 (transient-define-prefix jujutsu-status-new-popup ()
   "Popup for jj squash options."
   ["Options"
@@ -231,12 +252,14 @@ Returns a formatted string with appropriate text properties."
   "Popup for jujutsu actions in status buffer."
   ["Actions"
    ("a" "Abandon change" jujutsu-status-abandon)
+   ("b" "Branch" jujutsu-status-branch-popup)
    ("s" "Squash change" jujutsu-status-squash-popup)
    ("d" "Describe change" jujutsu-status-describe-popup)
    ("n" "New change" jujutsu-status-popup)])
 
 (define-key jujutsu-status-mode-map (kbd "?")    #'jujutsu-status-popup)
 (define-key jujutsu-status-mode-map (kbd "a")    #'jujutsu-status-abandon-popup)
+(define-key jujutsu-status-mode-map (kbd "b")    #'jujutsu-status-branch-popup)
 (define-key jujutsu-status-mode-map (kbd "s")    #'jujutsu-status-squash-popup)
 (define-key jujutsu-status-mode-map (kbd "d")    #'jujutsu-status-describe-popup)
 (define-key jujutsu-status-mode-map (kbd "n")    #'jujutsu-status-new-popup)
@@ -629,21 +652,6 @@ This provides a comprehensive overview of your repository's current state."
           (when result
             (throw 'found result))))
       nil)))
-
-(defun jujutsu-status--extract-node-metadata (node)
-  "Extract relevant metadata from NODE for the squash popup."
-  (let* ((type (nx-type node))
-         (props (nx-props node)))
-    (pcase type
-      (:file-change-header
-       (ht (:type 'file)
-           (:filename (ht-get props :filename))
-           (:change-type (ht-get props :type))))
-      (:file-change-diff-hunk-header
-       (ht (:type 'hunk)
-           (:filename (ht-get props :filename))
-           (:header (ht-get props :header))))
-      (_ (ht (:type 'unknown))))))
 
 (define-key jujutsu-status-mode-map (kbd "TAB") (lambda () (interactive) (jujutsu-status-dispatch 'toggle)))
 (define-key jujutsu-status-mode-map (kbd "RET") (lambda () (interactive) (jujutsu-status-dispatch 'enter)))

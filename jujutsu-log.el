@@ -33,7 +33,8 @@
 (defun jujutsu-log--get-log-entries (&optional revset)
   "Get status data for the given REVSET."
   (let ((revset (or revset jujutsu-log-revset-fallback))
-        (template (ht (:change-id-short "change_id.short(8)")
+        (template (ht (:change-id "change_id")
+                      (:change-id-short "change_id.short(8)")
                       (:change-id-shortest "change_id.shortest()")
                       (:commit-id-short "commit_id.short(8)")
                       (:commit-id-shortest "commit_id.shortest()")
@@ -47,11 +48,12 @@
                       (:git-head "git_head")
                       (:root "root")
                       (:immutable "immutable")
+                      (:parents "parents.map(|c| c.change_id()).join(\\\";\\\")")
                       (:description "description.first_line()"))))
     (--> (jujutsu-core--map-to-escaped-string template)
-        (jujutsu-core--log-w/template it revset)
-        (jujutsu-core--split-string-on-empty-lines it)
-        (-map #'jujutsu-core--parse-string-to-map it))))
+         (jujutsu-core--log-w/template it revset)
+         (jujutsu-core--split-string-on-empty-lines it)
+         (-map #'jujutsu-core--parse-string-to-map it))))
 
 (defun jujutsu-log--format-log-entry (data)
   "Format a status entry using DATA with fontification."
