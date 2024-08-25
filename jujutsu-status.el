@@ -380,18 +380,18 @@ ACTION is the user action to apply to the node."
         (setq hunks (ht-get props :hunks)))
       (ht-set node :children
               (when expanded-fut
-                (ht-map (lambda (header contents)
+                ;; ht-map would be cleaner, but reverses the order
+                (-map (lambda (header)
                           (nx :file-change-diff-hunk-header
                               (ht (:header header)
-                                  (:contents contents)
+                                  (:contents (ht-get hunks header))
                                   (:filename filename)
                                   (:type change-type)
                                   (:expanded nil))))
-                        hunks)))
+                        (reverse (ht-keys hunks)))))
       node)))
 
 (-comment
-
  (ht-map (lambda (k v) (list "k" k)) (ht (:foo "bar")
                                   (:bar "baz")))
 
@@ -432,8 +432,7 @@ ACTION is the user action to apply."
       (:log-section-header
        (jujutsu-status--update-log-section-header node action))
       (_ node))
-    (when (and (fboundp 'jujutsu-dev-track-user-action)
-               jujutsu-dev-track-user-action)
+    (when (bound-and-true-p jujutsu-dev-dump-user-actions)
       (jujutsu-dev--display-in-buffer node))
     node))
 

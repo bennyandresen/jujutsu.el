@@ -30,10 +30,8 @@
      (s-join " " (list "diff" "-r" revision "--git" filename)))))
 
 (-comment
-
  (jujutsu-diff--run "dash-x.el")
-
- )
+ 1)
 
 (defun jujutsu-diff--split-git-diff-by-file (diff-output)
   "Split DIFF-OUTPUT into separate diffs for each file."
