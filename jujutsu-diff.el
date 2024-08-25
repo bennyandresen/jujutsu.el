@@ -195,21 +195,27 @@ parsed diff content."
   "Pad string S to WIDTH."
   (format (format "%%-%ds" width) (or s "")))
 
+(-comment
+ (jujutsu-diff--pad-string "  hello world" 30)
+
+ 1)
+
 (defun jujutsu-diff--format-line (left right left-width right-width separator)
   "Format LEFT and RIGHT content with given widths (LEFT-WIDTH,RIGHT-WIDTH) and SEPARATOR."
   (-let* [((&hash :content left-content :type left-type) left)
           ((&hash :content right-content :type right-type) right)
+          ;; XXX: Some bug about the indentation lurking here
           (left-formatted (jujutsu-diff--pad-string left-content left-width))
           (right-formatted (jujutsu-diff--pad-string right-content right-width))
-          (is-context (and (eq left-type :context ) (eq right-type :context)))]
+          (is-context (and (eq left-type :context) (eq right-type :context)))]
     (concat
      (if is-context
          (propertize left-formatted 'face 'magit-diff-context)
-       (propertize left-formatted 'face 'magit-diff-removed-highlight))
+       (propertize left-formatted 'face 'magit-diff-removed))
      separator
      (if is-context
          (propertize right-formatted 'face 'magit-diff-context)
-       (propertize right-formatted 'face 'magit-diff-added-highlight)))))
+       (propertize right-formatted 'face 'magit-diff-added)))))
 
 (defun jujutsu-diff--format-header (content total-width)
   "Format header CONTENT to TOTAL-WIDTH."

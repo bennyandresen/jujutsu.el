@@ -537,7 +537,7 @@ file changes, commit log).")
 (defun jujutsu-status ()
   "Display the status of the current Jujutsu repository.
 
-This command opens a new buffer named *jujutsu-status* showing:
+This command opens a new buffer showing:
 - The working copy status
 - The parent commit status
 - A list of changes in the working copy
@@ -551,21 +551,23 @@ The status buffer is interactive, allowing you to:
 
 This provides a comprehensive overview of your repository's current state."
   (interactive)
-  (with-current-buffer (get-buffer-create "*jujutsu-status*")
-    (let ((inhibit-read-only t))
-      (erase-buffer)
-      (jujutsu-status-mode)
-      ;; v Set the initial app-state
-      (setq-local jujutsu-status-app-state (jujutsu-status--make-tree))
-      (setq-local jujutsu-status-previous-state nil)
-      ;; ^ Initialize previous state
-      (jujutsu-status-render))
-    (goto-char (point-min))
-    (setq-local jujutsu-status-current-dom-id nil)
-    ;; XXX: not nice
-    (when (fboundp 'hl-line-mode)
-      (hl-line-mode -1))
-    (switch-to-buffer "*jujutsu-status*")))
+  (let* ((project-name (jujutsu-core--get-project-name))
+         (buffer-name (format "jujutsu: %s" project-name)))
+    (with-current-buffer (get-buffer-create buffer-name)
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (jujutsu-status-mode)
+        ;; v Set the initial app-state
+        (setq-local jujutsu-status-app-state (jujutsu-status--make-tree))
+        (setq-local jujutsu-status-previous-state nil)
+        ;; ^ Initialize previous state
+        (jujutsu-status-render))
+      (goto-char (point-min))
+      (setq-local jujutsu-status-current-dom-id nil)
+      ;; XXX: not nice
+      (when (fboundp 'hl-line-mode)
+        (hl-line-mode -1))
+      (switch-to-buffer buffer-name))))
 
 (defvar-local jujutsu-status-current-dom-id nil
   "Buffer-local variable to store the current dom-id.")

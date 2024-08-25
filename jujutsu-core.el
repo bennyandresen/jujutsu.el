@@ -20,11 +20,23 @@
 ;;; Code:
 (require 's)
 (require 'ht)
+(require 'dash)
 (require 'dash-x)
 
 (defun jujutsu-core--find-project-root ()
   "Find the root directory of the Jujutsu project."
   (locate-dominating-file default-directory ".jj"))
+
+(defun jujutsu-core--get-project-name ()
+  "Get the directory name of the project root."
+  (-> (jujutsu-core--find-project-root)
+      file-name-directory
+      directory-file-name
+      file-name-nondirectory))
+
+(-comment
+ (jujutsu-core--get-project-name)
+ 1)
 
 (defun jujutsu-core--run-command (command &optional use-personal-config)
   "Run a jj COMMAND from the project root and return its output as a string.
