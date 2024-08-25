@@ -1,32 +1,43 @@
 #+title: Areas to work on
 
-* Status
-** A/M/D file overview
-** Diffs
-*** Side-By-Side Diff
-**** split based on git and then reconstitute with overlays
-**** investigate overlays or how magit did it
-*** Segments
-**** within the same file the different segments
-*** squash action acting only on currently selected segment/file
-** Shortlog equivalent
-*** make configurable
+* PROJ Status
+** DONE A/M/D file overview
+** STRT Diffs
+*** DONE Side-By-Side Diff
+**** KILL split based on git and then reconstitute with overlays
+**** KILL investigate overlays or how magit did it
+**** STRT self-made segment
+***** DONE within the same file the different segments
+***** TODO have all hunks be the same length, for aesthetic purposes
+*** TODO Up/Below Diff
+*** TODO squash action acting only on currently selected segment/file
+** DONE Shortlog equivalent
+*** DONE make configurable
 ** Overview (Two liner)
-*** conflict marker missing
-* Log
-** Operation Log
-** Obslog
-** Commit Log
-* Actions
-** Squash -i
+*** TODO conflict marker missing
+* PROJ Log
+** TODO Operation Log
+*** list of log entries based on `jj log`
+*** side-view buffer with details for individual change
+**** modeled on the magit-log view, incl. auto-update of the details buffer based on movements
+** TODO Obslog
+** TODO Commit Log
+* PROJ Interactions with jj cli
+** TODO Process logs for real user commands akin to magit's $ buffer
+** TODO Squash -i
 *** figure out how to call emacs after jj prepares temporary directory
 **** uses ui.diff-editor even for squash
 **** by default everything is selected for squash, revert needed
-** Diff
-***
-* Minibuffer integration
+** TODO Diff
+*** TODO Jump to affected line
+*** TODO squash selected hunk only
+* PROJ modeline integration
 ** parent change > change > description
 ** also show change id after each save?
-* Multiple workflow
-** Squash workflow
-** Split workflow
+* PROJ Multiple workflow
+** Have a project wide setting that makes the workflow easier with keybinding flows?
+** Workflows
+*** Squash workflow
+https://steveklabnik.github.io/jujutsu-tutorial/real-world-workflows/the-squash-workflow.html
+*** Edit workflow
+https://steveklabnik.github.io/jujutsu-tutorial/real-world-workflows/the-edit-workflow.html
