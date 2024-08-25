@@ -14,9 +14,25 @@
 ;; This file is not part of GNU Emacs.
 ;;
 ;;; Commentary:
+
+;; This module provides a lightweight, flexible tree structure implementation
+;; for Emacs Lisp, primarily designed for building interactive, hierarchical
+;; user interfaces.
 ;;
-;;  Description
+;; The main concept is the 'nx node', which represents a single element in
+;; the tree. Each node has a type, properties, and can contain child nodes.
+;; This structure allows for efficient creation, manipulation, and rendering
+;; of complex, nested data structures.
 ;;
+;; Key features:
+;; - Simple node creation with `nx-node` (aliased to `nx`)
+;; - Efficient tree diffing and patching
+;; - Utilities for traversing and manipulating the tree structure
+;; - Integration with hash-tables for flexible property storage
+;;
+;; This module is designed to be used as a foundation for building more
+;; complex UI components or data representations in Emacs Lisp applications.
+
 ;;; Code:
 (require 'ht)
 (require 'dash)

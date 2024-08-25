@@ -14,9 +14,27 @@
 ;; This file is not part of GNU Emacs.
 ;;
 ;;; Commentary:
+
+;; This module provides an interactive Jujutsu status viewer for Emacs.
+;; It displays a comprehensive view of the current repository state,
+;; including working copy status, parent commit status, file changes,
+;; and a log of recent commits.
 ;;
-;;  Description
+;; The status buffer is built using a tree-like structure (implemented
+;; in nx.el) which allows for efficient updates and rendering. Users
+;; can interact with various elements in the buffer, such as expanding
+;; file change details or performing actions on specific commits or files.
 ;;
+;; Key features:
+;; - Interactive buffer with expandable sections
+;; - Integration with transient for command popups
+;; - Efficient updates using a diff-based approach
+;; - Customizable rendering and behavior
+;;
+;; Main entry point is the `jujutsu-status' command, which opens the
+;; status buffer. Users can then navigate and interact with the buffer
+;; using keybindings like TAB (toggle expansion) and RET (perform action).
+
 ;;; Code:
 (require 'transient)
 (require 'dash)
@@ -30,7 +48,18 @@
 (require 'jujutsu-diff)
 
 (defun jujutsu-status--format-status-line (data)
-  "Format a status line using DATA with fontification."
+  "Format a status line using DATA with fontification.
+
+DATA is expected to be a hash table containing the following keys:
+  :change-id-short      - Short change ID
+  :change-id-shortest   - Shortest unique change ID
+  :commit-id-short      - Short commit ID
+  :commit-id-shortest   - Shortest unique commit ID
+  :branches             - Branch information (if any)
+  :empty                - Whether the commit is empty
+  :description          - Commit description
+
+Returns a formatted string with appropriate text properties."
   (-let* [((&hash :change-id-short chids
                   :change-id-shortest chidss
                   :commit-id-short coids
@@ -119,7 +148,7 @@
 (define-key jujutsu-status-mode-map (kbd "g") #'jujutsu-status)
 
 (defun jujutsu-status-squash (args)
-  "Run jj squash with ARGS."
+  "Run jj squash with ARGS and metadata context."
   (interactive (list (transient-args 'jujutsu-status-squash-popup)))
   (let ((cmd (concat "squash " (s-join " " args))))
     (jujutsu-core--run-command cmd t)
@@ -152,10 +181,37 @@
   ["Actions"
    ("d" "Describe" jujutsu-status-describe)])
 
+(defun jujutsu-status--get-metadata-at-point (point)
+  "Get metadata for the node at POINT in the jujutsu status buffer."
+  (let* ((dom-id (get-text-property point 'nx/id))
+         (node (when dom-id
+                 (jujutsu-status--find-node-by-id jujutsu-status-app-state dom-id))))
+    (when node
+      (jujutsu-status--extract-node-metadata node))))
+
 (transient-define-prefix jujutsu-status-squash-popup ()
-  "Popup for jj squash options."
+  "Popup for jj squash options, with context from current buffer position."
+  :init-value (lambda (obj)
+                (let ((metadata (jujutsu-status--get-metadata-at-point (point))))
+                  (oset obj value (list
+                                   (when (ht-get metadata :filename)
+                                     (format "--file=%s" (ht-get metadata :filename)))
+                                   (when (and (eq (ht-get metadata :type) 'hunk)
+                                              (ht-get metadata :header))
+                                     (format "--hunk=%s" (ht-get metadata :header)))))))
   ["Options"
-   ("-I" "Ignore immutable" "--ignore-immutable")]
+   ("-I" "Ignore immutable" "--ignore-immutable")
+   ("-f" "File" "--file="
+    :init-value (lambda (obj)
+                  (let ((metadata (jujutsu-status--get-metadata-at-point (point))))
+                    (when (ht-get metadata :filename)
+                      (oset obj value (ht-get metadata :filename))))))
+   ("-h" "Hunk" "--hunk="
+    :init-value (lambda (obj)
+                  (let ((metadata (jujutsu-status--get-metadata-at-point (point))))
+                    (when (and (eq (ht-get metadata :type) 'hunk)
+                               (ht-get metadata :header))
+                      (oset obj value (ht-get metadata :header))))))]
   ["Actions"
    ("s" "Squash" jujutsu-status-squash)])
 
@@ -180,7 +236,7 @@
    ("n" "New change" jujutsu-status-popup)])
 
 (define-key jujutsu-status-mode-map (kbd "?")    #'jujutsu-status-popup)
-(define-key jujutsu-status-mode-map (kbd "a")    #'jujutsu-status-abandon)
+(define-key jujutsu-status-mode-map (kbd "a")    #'jujutsu-status-abandon-popup)
 (define-key jujutsu-status-mode-map (kbd "s")    #'jujutsu-status-squash-popup)
 (define-key jujutsu-status-mode-map (kbd "d")    #'jujutsu-status-describe-popup)
 (define-key jujutsu-status-mode-map (kbd "n")    #'jujutsu-status-new-popup)
@@ -201,7 +257,12 @@
             (nx :newline))))))
 
 (defun jujutsu-status--make-file-change (status-data filename)
-  "STATUS-DATA FILENAME."
+  "Create a file change node for FILENAME based on STATUS-DATA.
+
+STATUS-DATA is a hash table containing repository status information.
+FILENAME is the name of the file to create a change node for.
+
+Returns an nx node representing the file change."
   (-let* [((&hash :files-added added
                   :files-modified modified
                   :files-deleted deleted
@@ -290,7 +351,11 @@
 
 (defun jujutsu-status--render-tree (tree)
   "Render the Jujutsu TREE structure as a string.
-TREE is the root node of the Jujutsu status tree."
+
+TREE is the root node of the Jujutsu status tree.
+
+Returns a string representation of the entire tree, with text properties
+for interactive functionality."
   (jujutsu-status--render-node tree ""))
 
 (defun jujutsu-status--render-node (node result)
@@ -345,9 +410,14 @@ RESULT is the accumulated string of rendered nodes."
 
 (defun jujutsu-status--update-node (node dom-id action)
   "Recursively update a NODE or its children based on DOM-ID and ACTION.
+
 NODE is the current node being checked.
 DOM-ID is the unique identifier of the node to update.
-ACTION is the user action to apply to the node."
+ACTION is the user action to apply to the node. Possible values are:
+  'toggle  - Toggle expansion state of the node
+  'enter   - Perform the default action for the node type
+
+Returns the updated node or its original state if no update was necessary."
   (let ((node-id (nx-id node)))
     (if (equal node-id dom-id)
         (jujutsu-status--update-node-by-action node action)
@@ -419,22 +489,31 @@ ACTION is the user action to apply to the node."
       (ht-set node :props props)))
   node)
 
+(defvar jujutsu-status--node-action-handlers
+  (ht (:file-change-header
+       #'jujutsu-status--update-file-change-header)
+      (:file-change-diff-hunk-header
+       #'jujutsu-status--update-file-change-diff-hunk-header)
+      (:log-section-header
+       #'jujutsu-status--update-log-section-header))
+  "Dispatch table for node update actions.
+
+This hash table maps node types to their corresponding update
+handler functions. When a user action is performed on a node,
+the appropriate handler is called based on the node's type.")
+
 (defun jujutsu-status--update-node-by-action (node action)
   "Apply ACTION to NODE, updating its state accordingly.
 NODE is the node to update.
 ACTION is the user action to apply."
-  (let ((type (ht-get node :type)))
-    (pcase type
-      (:file-change-header
-       (jujutsu-status--update-file-change-header node action))
-      (:file-change-diff-hunk-header
-       (jujutsu-status--update-file-change-diff-hunk-header node action))
-      (:log-section-header
-       (jujutsu-status--update-log-section-header node action))
-      (_ node))
-    (when (bound-and-true-p jujutsu-dev-dump-user-actions)
-      (jujutsu-dev--display-in-buffer node))
-    node))
+  (let* ((type (ht-get node :type))
+         (handler (ht-get jujutsu-status--node-action-handlers type)))
+    (if handler
+        (funcall handler node action)
+      node)) ; Return the node unchanged if no handler is found
+  (when (bound-and-true-p jujutsu-dev-dump-user-actions)
+    (jujutsu-dev--display-in-buffer node))
+  node)
 
 (defun jujutsu-status--update-tree (tree dom-id action)
   "Update the Jujutsu TREE based on user ACTION at DOM-ID.
@@ -444,7 +523,15 @@ ACTION is the user action to apply to the node."
   (jujutsu-status--update-node tree dom-id action))
 
 (defvar-local jujutsu-status-app-state nil
-"The application state for the jujutsu status buffer.")
+  "The application state for the jujutsu status buffer.
+
+This variable holds the current tree structure representing the
+entire state of the Jujutsu status view. It is updated whenever
+the user interacts with the buffer or when the status is refreshed.
+
+The structure is a nested tree of nx nodes, each representing a
+different part of the Jujutsu status (e.g., working copy status,
+file changes, commit log).")
 (defvar-local jujutsu-status-previous-state nil)
 
 (defun jujutsu-status ()
@@ -514,18 +601,47 @@ This provides a comprehensive overview of your repository's current state."
   (interactive)
   (let* ((pos (point))
          (dom-id (get-text-property pos 'nx/id)))
-    (when (and dom-id action)
-      (setq jujutsu-status-current-dom-id dom-id)
-      (jujutsu-status-update-state
-       (lambda (state)
-         (jujutsu-status--update-tree state dom-id action)))
-      (if-let ((new-pos (text-property-any
-                         (point-min)
-                         (point-max)
-                         'nx/id
-                         jujutsu-status-current-dom-id)))
-          (goto-char new-pos)
-        (message "Couldn't find the original position")))))
+    (when dom-id
+      (pcase action
+        ((or 'toggle 'enter)
+         (setq jujutsu-status-current-dom-id dom-id)
+         (jujutsu-status-update-state
+          (lambda (state)
+            (jujutsu-status--update-tree state dom-id action)))
+         (if-let ((new-pos (text-property-any
+                            (point-min)
+                            (point-max)
+                            'nx/id
+                            jujutsu-status-current-dom-id)))
+             (goto-char new-pos)
+           (message "Couldn't find the original position")))
+        (_ (message "Unknown action: %s" action))))))
+
+(defun jujutsu-status--find-node-by-id (tree id)
+  "Find a node in TREE with the given ID."
+  (if (equal (nx-id tree) id)
+      tree
+    (catch 'found
+      (dolist (child (nx-children tree))
+        (let ((result (jujutsu-status--find-node-by-id child id)))
+          (when result
+            (throw 'found result))))
+      nil)))
+
+(defun jujutsu-status--extract-node-metadata (node)
+  "Extract relevant metadata from NODE for the squash popup."
+  (let* ((type (nx-type node))
+         (props (nx-props node)))
+    (pcase type
+      (:file-change-header
+       (ht (:type 'file)
+           (:filename (ht-get props :filename))
+           (:change-type (ht-get props :type))))
+      (:file-change-diff-hunk-header
+       (ht (:type 'hunk)
+           (:filename (ht-get props :filename))
+           (:header (ht-get props :header))))
+      (_ (ht (:type 'unknown))))))
 
 (define-key jujutsu-status-mode-map (kbd "TAB") (lambda () (interactive) (jujutsu-status-dispatch 'toggle)))
 (define-key jujutsu-status-mode-map (kbd "RET") (lambda () (interactive) (jujutsu-status-dispatch 'enter)))
