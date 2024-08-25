@@ -20,7 +20,7 @@
 ;;; Code:
 (require 's)
 (require 'ht)
-(require 'jujutsu-dash)
+(require 'dash-x)
 
 (defun jujutsu-core--find-project-root ()
   "Find the root directory of the Jujutsu project."

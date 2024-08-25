@@ -1,4 +1,4 @@
-;;; jujutsu-dash.el --- Description -*- lexical-binding: t; -*-
+;;; dash-x.el --- Description -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2024 Benjamin Andresen
 ;;
@@ -7,8 +7,6 @@
 ;; Created: August 19, 2024
 ;; Modified: August 19, 2024
 ;; Version: 0.0.1
-;; Keywords: abbrev bib c calendar comm convenience data docs emulations extensions faces files frames games hardware help hypermedia i18n internal languages lisp local maint mail matching mouse multimedia news outlines processes terminals tex tools unix vc wp
-;; Homepage: https://github.com/bennyandresen/jujutsu-dash
 ;; Package-Requires: ((emacs "24.3"))
 ;;
 ;; This file is not part of GNU Emacs.
@@ -19,7 +17,7 @@
 ;;
 ;;; Code:
 
-(defvar jujutsu-dash-tests-enabled nil)
+(defvar dash-x-tests-enabled nil)
 
 (defmacro -comment (&rest _body)
   nil)
@@ -37,9 +35,9 @@ Example usage:
  (+ x y) := 30
  (- y x) := 10)
 
-This macro is only active when `jujutsu-dash-tests-enabled' is non-nil.
+This macro is only active when `dash-x-tests-enabled' is non-nil.
 It returns a string summarizing the test results."
-  (when (bound-and-true-p jujutsu-dash-tests-enabled)
+  (when (bound-and-true-p dash-x-tests-enabled)
     (let ((setup-forms '())
           (test-forms '())
           (test-names '()))
@@ -70,7 +68,7 @@ It returns a string summarizing the test results."
                "No test results found")))))))
 
 (defun -tests-enable! ()
-  (setq jujutsu-dash-tests-enabled t))
+  (setq dash-x-tests-enabled t))
 
 (defun -slurp (filename)
   (with-temp-buffer
@@ -79,5 +77,5 @@ It returns a string summarizing the test results."
      (point-min)
      (point-max))))
 
-(provide 'jujutsu-dash)
-;;; jujutsu-dash.el ends here
+(provide 'dash-x)
+;;; dash-x.el ends here

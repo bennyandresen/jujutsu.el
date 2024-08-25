@@ -1,6 +1,6 @@
 (add-to-list 'load-path default-directory)
 
-(require 'jujutsu-dash)
+(require 'dash-x)
 (require 'jujutsu)
 (require 'parseedn)
 (require 'dash)

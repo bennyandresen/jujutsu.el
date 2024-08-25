@@ -17,10 +17,12 @@
 ;;  Description
 ;;
 ;;; Code:
-(require 'jujutsu-dash)
 (require 'dash)
+(require 'dash-x)
 (require 'ht)
 (require 's)
+
+(require 'jujutsu-core)
 
 (defun jujutsu-diff--run (filename &optional revision)
   (let ((revision (or revision "@")))
@@ -29,7 +31,7 @@
 
 (-comment
 
- (jujutsu-diff--run "jujutsu-status.el")
+ (jujutsu-diff--run "dash-x.el")
 
  )
 
@@ -166,19 +168,6 @@ parsed diff content."
                    header
                    (jujutsu-diff--parse-diff-hunk content)))))
     result))
-
-(-comment
-
-(--> "resources/test-diff-git.output"
-     -slurp
-     jujutsu-diff--split-git-diff-by-file
-     jujutsu-diff--parse-diffs
-     (ht-get* it "jujutsu.el" :diff-content)
-     jujutsu-diff--split-git-diff-into-hunks
-     jujutsu-diff--parse-hunks
-     ht-keys
-     random)
- )
 
 (-tests
  (--> "resources/test-diff-git.output"
