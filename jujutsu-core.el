@@ -160,7 +160,7 @@ the command's output as a string, with each log entry separated by newlines."
                       (:empty "empty")
                       (:branches "branches")
                       (:git-head "git_head")
-                      (:description "description"))))
+                      (:description "description.first_line()"))))
     (-> (jujutsu-core--map-to-escaped-string template)
         (jujutsu-core--show-w/template rev)
         jujutsu-core--parse-string-to-map)))

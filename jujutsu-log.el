@@ -47,7 +47,7 @@
                       (:git-head "git_head")
                       (:root "root")
                       (:immutable "immutable")
-                      (:description "description"))))
+                      (:description "description.first_line()"))))
     (--> (jujutsu-core--map-to-escaped-string template)
         (jujutsu-core--log-w/template it revset)
         (jujutsu-core--split-string-on-empty-lines it)
