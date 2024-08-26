@@ -35,12 +35,12 @@
                       (:commit-id-short "commit_id.short(8)")
                       (:commit-id-shortest "commit_id.shortest()")
                       (:empty "empty")
-                      (:branches "branches")
+                      (:bookmarks "bookmarks")
                       (:hidden "hidden")
                       (:author-email "author.email()")
                       (:timestamp "author.timestamp().format(\\\"%Y-%m-%d %H:%M:%S\\\")")
                       (:current-working-copy "current_working_copy")
-                      (:remote-branches "remote_branches")
+                      (:remote-bookmarks "remote_bookmarks")
                       (:git-head "git_head")
                       (:root "root")
                       (:immutable "immutable")
@@ -51,11 +51,17 @@
          (jujutsu-core--split-string-on-empty-lines it)
          (-map #'jujutsu-core--parse-string-to-map it))))
 
+(-comment
+
+ (jujutsu-log--get-log-entries)
+
+ )
+
 (defun jujutsu-log--format-log-entry (data)
   "Format a status entry using DATA with fontification."
   (-let* [((&hash :change-id-short chids :change-id-shortest chidss
                   :commit-id-short coids :commit-id-shortest coidss
-                  :branches branches :empty empty :description desc
+                  :bookmarks bookmarks :empty empty :description desc
                   :root root :author-email author-email
                   :timestamp timestamp :immutable immutable
                   :current-working-copy cwc)
@@ -75,9 +81,9 @@
                    ""))
           (timestamp (if timestamp (propertize timestamp 'face 'magit-log-date)
                        ""))
-          (branches (if branches
-                        (s-concat (propertize branches 'face 'magit-branch-local) " ")
-                      ""))
+          (bookmarks (if bookmarks
+                         (s-concat (propertize bookmarks 'face 'magit-branch-local) " ")
+                       ""))
           (change-id (jujutsu-formatting--format-id chids chidss))
           (commit-id (jujutsu-formatting--format-id coids coidss))
           (desc (if desc
@@ -91,7 +97,7 @@
                 commit-id)
       (s-join ""
               (list
-               (format "%s  %s %s %s %s%s" node change-id author-email timestamp branches commit-id)
+               (format "%s  %s %s %s %s%s" node change-id author-email timestamp bookmarks commit-id)
                "\n"
                (format "│  %s%s\n" empty desc))))))
 

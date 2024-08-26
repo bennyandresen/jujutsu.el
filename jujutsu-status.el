@@ -55,7 +55,7 @@ DATA is expected to be a hash table containing the following keys:
   :change-id-shortest   - Shortest unique change ID
   :commit-id-short      - Short commit ID
   :commit-id-shortest   - Shortest unique commit ID
-  :branches             - Branch information (if any)
+  :bookmarks            - Bookmark information (if any)
   :empty                - Whether the commit is empty
   :description          - Commit description
 
@@ -64,23 +64,23 @@ Returns a formatted string with appropriate text properties."
                   :change-id-shortest chidss
                   :commit-id-short coids
                   :commit-id-shortest coidss
-                  :branches branches
+                  :bookmarks bookmarks
                   :empty empty
                   :description desc)
            data)
           (empty (if (s-equals? empty "true")
                      (propertize "(empty) " 'face 'warning)
                    ""))
-          (branches (if branches
-                        (s-concat (propertize branches 'face 'magit-branch-local)
-                                " | ")
-                      ""))
+          (bookmarks (if bookmarks
+                         (s-concat (propertize bookmarks 'face 'magit-branch-local)
+                                   " | ")
+                       ""))
           (change-id (jujutsu-formatting--format-id chids chidss))
           (commit-id (jujutsu-formatting--format-id coids coidss))
           (desc (if desc
                     (propertize desc 'face 'jujutsu-description-face)
                   (propertize "(no description set)" 'face 'warning)))]
-    (format "%s %s %s%s%s" change-id commit-id branches empty desc)))
+    (format "%s %s %s%s%s" change-id commit-id bookmarks empty desc)))
 
 (defun jujutsu-status--format-file-change-header (props)
   "Format a single file change based on the PROPS."
@@ -111,10 +111,10 @@ Returns a formatted string with appropriate text properties."
                                 (:type :modified)
                                 (:hunks-headers '("@@ -151,7 +162,8 @@"
                                                   "@@ -22,6 +22,17 @@"))))
-  (jujutsu-status--format-file-change-header (ht-merge jj--crude-test-props (ht (:expanded nil))))
-  := "M jujutsu-diff.el\n"
-  (jujutsu-status--format-file-change-header (ht-merge jj--crude-test-props (ht (:expanded t))))
-  := "M jujutsu-diff.el\n@@ -151,7 +162,8 @@\n@@ -22,6 +22,17 @@\n")
+ (jujutsu-status--format-file-change-header (ht-merge jj--crude-test-props (ht (:expanded nil))))
+ := "M jujutsu-diff.el\n"
+ (jujutsu-status--format-file-change-header (ht-merge jj--crude-test-props (ht (:expanded t))))
+ := "M jujutsu-diff.el\n@@ -151,7 +162,8 @@\n@@ -22,6 +22,17 @@\n")
 
 (defun jujutsu-status--format-file-change-diff-hunk-header (props)
   "Format a single file change based on the PROPS."
@@ -353,7 +353,7 @@ Returns an nx node representing the file change."
          (-map (lambda (entry)
                  (nx :log-entry entry nil))
                lentries)
-         (when (not includes-root?) (list (nx :verbatim "~")))))))
+         (when (not includes-root?) (list (nx :text (ht (:text "~") (:face 'default)))))))))
 
 (defun jujutsu-status--make-tree ()
   "Construct the complete Jujutsu status tree structure."
@@ -369,7 +369,7 @@ Returns an nx node representing the file change."
 
 (-comment
  (->> (jujutsu-status--make-tree)
-       jujutsu-dev--display-in-buffer)
+      jujutsu-dev--display-in-buffer)
  1)
 
 (defun jujutsu-status--render-tree (tree)
@@ -427,7 +427,7 @@ RESULT is the accumulated string of rendered nodes."
                 children))
 
 (-comment
- (propertize "foo" 'nx/id (nx--id (nx :foo)))
+ (propertize "foo" 'nx/id (nx-id (nx :foo)))
 
  )
 
@@ -465,28 +465,28 @@ Returns the updated node or its original state if no update was necessary."
       (ht-set props :expanded expanded-fut)
       (when (and (null hunks) expanded-fut)
         (ht-set props :hunks (--> (jujutsu-diff--run filename chids)
-                                   jujutsu-diff--split-git-diff-by-file
-                                   jujutsu-diff--parse-diffs
-                                   (ht-get* it filename :diff-content)
-                                   jujutsu-diff--split-git-diff-into-hunks
-                                   jujutsu-diff--parse-hunks))
+                                  jujutsu-diff--split-git-diff-by-file
+                                  jujutsu-diff--parse-diffs
+                                  (ht-get* it filename :diff-content)
+                                  jujutsu-diff--split-git-diff-into-hunks
+                                  jujutsu-diff--parse-hunks))
         (setq hunks (ht-get props :hunks)))
       (ht-set node :children
               (when expanded-fut
                 ;; ht-map would be cleaner, but reverses the order
                 (-map (lambda (header)
-                          (nx :file-change-diff-hunk-header
-                              (ht (:header header)
-                                  (:contents (ht-get hunks header))
-                                  (:filename filename)
-                                  (:type change-type)
-                                  (:expanded nil))))
-                        (reverse (ht-keys hunks)))))
+                        (nx :file-change-diff-hunk-header
+                            (ht (:header header)
+                                (:contents (ht-get hunks header))
+                                (:filename filename)
+                                (:type change-type)
+                                (:expanded nil))))
+                      (reverse (ht-keys hunks)))))
       node)))
 
 (-comment
  (ht-map (lambda (k v) (list "k" k)) (ht (:foo "bar")
-                                  (:bar "baz")))
+                                         (:bar "baz")))
 
  )
 
@@ -535,7 +535,7 @@ ACTION is the user action to apply."
         (funcall handler node action)
       node)) ; Return the node unchanged if no handler is found
   (when (bound-and-true-p jujutsu-dev-dump-user-actions)
-    (jujutsu-dev--display-in-buffer node))
+    (jujutsu-dev-dump-tree node))
   node)
 
 (defun jujutsu-status--update-tree (tree dom-id action)
@@ -584,7 +584,7 @@ This provides a comprehensive overview of your repository's current state."
         (setq-local jujutsu-status-app-state (jujutsu-status--make-tree))
         (setq-local jujutsu-status-previous-state nil)
         ;; ^ Initialize previous state
-        (jujutsu-status-render))
+        (jujutsu-status-render2))
       (goto-char (point-min))
       (setq-local jujutsu-status-current-dom-id nil)
       ;; XXX: not nice
@@ -602,23 +602,34 @@ This provides a comprehensive overview of your repository's current state."
     ('refresh (jujutsu-status))))
 
 (defun jujutsu-status-render ()
-  "Render the current application state using the diffing algorithm."
+  "Render the current application state from scratch."
   (let ((inhibit-read-only t)
-        (old-state (or jujutsu-status-previous-state
-                       (ht)))           ; Empty state if no previous state
         (new-state jujutsu-status-app-state))
-    ;; XXX: use nx-diff-trees to identify tree operations and describe the
-    ;; needed side effects to get to that new state
     (erase-buffer)
     (insert (jujutsu-status--render-tree jujutsu-status-app-state))
     (setq jujutsu-status-previous-state new-state)))
 
+(defun jujutsu-status-render2 ()
+  "Render the current application state using the diffing algorithm."
+  (let* ((inhibit-read-only t)
+         (old-state (if (eq jujutsu-status-previous-state nil)
+                        (ht)
+                      (nx-copy jujutsu-status-previous-state)))
+         (new-state (nx-copy jujutsu-status-app-state))
+         (diff-ops (nx-diff-trees old-state new-state)))
+    (unless (nx? old-state)
+      ;; very first insert has to be a full render
+      (insert (jujutsu-status--render-tree new-state)))
+    (nx-buffer-apply-diff (current-buffer)
+                          (ht (:diff-ops diff-ops) (:state new-state))
+                          #'jujutsu-status--render-node)
+    (setq jujutsu-status-previous-state new-state)))
 
 (defun jujutsu-status-update-state (updater)
   "Update the application state using UPDATER function."
   (let ((new-state (funcall updater jujutsu-status-app-state)))
     (setq jujutsu-status-app-state new-state)
-    (jujutsu-status-render)))
+    (jujutsu-status-render2)))
 
 ;; Dispatch function for user actions
 (defun jujutsu-status-dispatch (action)

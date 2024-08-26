@@ -64,6 +64,7 @@ template and revision, returning the command's output as a string."
          (formatted (format "show --summary --template \"%s\" %s"
                             template
                             rev)))
+    (setq foo-template template)
     (jujutsu-core--run-command formatted)))
 
 (defun jujutsu-core--log-w/template (template &optional revset)
@@ -89,8 +90,8 @@ the command's output as a string, with each log entry separated by newlines."
 (defun jujutsu-core--map-to-escaped-string (map)
   "Convert MAP (hash-table) to an escaped string for use as a jj template."
   (let ((k->s (lambda (k) (if (keywordp k)
-                         (intern (substring (symbol-name k) 1))
-                       k))))
+                              (intern (substring (symbol-name k) 1))
+                            k))))
     (->> map
          (ht-map (lambda (key value)
                    (format "\\\"%s \\\" ++ %s ++ \\\"\\\\n\\\""
@@ -99,7 +100,7 @@ the command's output as a string, with each log entry separated by newlines."
 
 (-tests
  (let ((m (ht (:foo nil)
-            (:bar 1))))
+              (:bar 1))))
    (jujutsu-core--map-to-escaped-string m))
  :=
  "\\\"bar \\\" ++ 1 ++ \\\"\\\\n\\\" ++ \\\"foo \\\" ++ nil ++ \\\"\\\\n\\\"")
@@ -134,8 +135,8 @@ If the key contains `:list', the value is split based on `;'."
  ;; => #s(hash-table ... (:commit-id "abc123"))
 
  ;; List key-value pair
- (jujutsu-core--parse-key-value "branches:list main;feature-1;hotfix")
- ;; => #s(hash-table ... (:branches-list ("main" "feature-1" "hotfix")))
+ (jujutsu-core--parse-key-value "bookmarks:list main;feature-1;hotfix")
+ ;; => #s(hash-table ... (:bookmarks-list ("main" "feature-1" "hotfix")))
 
  ;; Key with "list:" but no semicolons
  (jujutsu-core--parse-key-value "files:list file1.txt")
@@ -144,7 +145,7 @@ If the key contains `:list', the value is split based on `;'."
  ;; Regular key with semicolons (not treated as a list)
  (jujutsu-core--parse-key-value "description Some; text; here")
  ;; => #s(hash-table ... (:description "Some; text; here"))
-)
+ )
 
 (defun jujutsu-core--parse-and-group-file-changes (file-changes)
   "Parse and group FILE-CHANGES by their change type into a hash-table."
@@ -183,12 +184,18 @@ If the key contains `:list', the value is split based on `;'."
                       (:commit-id-short "commit_id.short(8)")
                       (:commit-id-shortest "commit_id.shortest()")
                       (:empty "empty")
-                      (:branches "branches")
+                      (:bookmarks "bookmarks")
                       (:git-head "git_head")
                       (:description "description.first_line()"))))
     (-> (jujutsu-core--map-to-escaped-string template)
         (jujutsu-core--show-w/template rev)
         jujutsu-core--parse-string-to-map)))
+
+(-comment
+ (jujutsu-core--get-status-data "@")
+
+ foo-template
+ )
 
 
 (provide 'jujutsu-core)

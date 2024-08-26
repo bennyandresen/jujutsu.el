@@ -38,6 +38,13 @@
 
  1)
 
+(defun jujutsu-dev--generic-jet (x)
+  (let ((temp-file (make-temp-file "jujutsu-")))
+    (with-temp-buffer
+      (insert (parseedn-print-str x))
+      (write-region (point-min) (point-max) temp-file)
+      (s-trim (shell-command-to-string (s-join " " (list "cat" temp-file "|" "jet")))))))
+
 (defvar jujutsu-dev-dump-user-actions nil)
 
 (-comment
@@ -65,13 +72,14 @@ replaced with the new output each time this function is called."
 
  1)
 
-(defun jujutsu-dev-dump-tree ()
+
+(defun jujutsu-dev-dump-tree (&optional tree name)
   (interactive)
-  (let ((current-tree jujutsu-status-app-state))
-    (with-current-buffer (get-buffer-create "*jj debug*")
+  (let ((current-tree (or tree jujutsu-status-app-state)))
+    (with-current-buffer (get-buffer-create (or name "*jj debug*"))
       (fundamental-mode)
       (erase-buffer)
       (-> current-tree
-          jujutsu-dev--ht-to-edn-pp
+          jujutsu-dev--generic-jet
           insert)
       (clojure-mode))))
