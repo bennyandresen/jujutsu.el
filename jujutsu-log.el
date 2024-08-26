@@ -44,7 +44,7 @@
                       (:git-head "git_head")
                       (:root "root")
                       (:immutable "immutable")
-                      (:parents "parents.map(|c| c.change_id()).join(\\\";\\\")")
+                      (:parents:list "parents.map(|c| c.change_id()).join(\\\";\\\")")
                       (:description "description.first_line()"))))
     (--> (jujutsu-core--map-to-escaped-string template)
          (jujutsu-core--log-w/template it revset)

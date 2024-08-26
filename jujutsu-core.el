@@ -112,7 +112,8 @@ the command's output as a string, with each log entry separated by newlines."
       (ht (m1 m2)))))
 
 (defun jujutsu-core--parse-key-value (line)
-  "Parse a KEY-VALUE LINE into a hash-table."
+  "Parse a KEY-VALUE LINE into a hash-table.
+If the key contains `:list', the value is split based on `;'."
   (let ((s->kw (lambda (s) (intern (s-prepend ":" s)))))
     (unless (s-matches? (rx bos (any "AMD") " ") line)
       (-when-let* [(regex (rx bos
@@ -121,7 +122,29 @@ the command's output as a string, with each log entry separated by newlines."
                               (optional (group (+ not-newline))) ; optional value
                               eos))
                    ((res m1 m2) (s-match regex line))]
-        (ht ((funcall s->kw m1) m2))))))
+        (let* ((key (funcall s->kw m1))
+               (value (if (and m2 (s-contains? ":list" (symbol-name key)))
+                          (s-split ";" m2 t)
+                        m2)))
+          (ht (key value)))))))
+
+(-comment
+ ;; Regular key-value pair
+ (jujutsu-core--parse-key-value "commit-id abc123")
+ ;; => #s(hash-table ... (:commit-id "abc123"))
+
+ ;; List key-value pair
+ (jujutsu-core--parse-key-value "branches:list main;feature-1;hotfix")
+ ;; => #s(hash-table ... (:branches-list ("main" "feature-1" "hotfix")))
+
+ ;; Key with "list:" but no semicolons
+ (jujutsu-core--parse-key-value "files:list file1.txt")
+ ;; => #s(hash-table ... (:files-list ("file1.txt")))
+
+ ;; Regular key with semicolons (not treated as a list)
+ (jujutsu-core--parse-key-value "description Some; text; here")
+ ;; => #s(hash-table ... (:description "Some; text; here"))
+)
 
 (defun jujutsu-core--parse-and-group-file-changes (file-changes)
   "Parse and group FILE-CHANGES by their change type into a hash-table."
