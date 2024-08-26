@@ -129,7 +129,9 @@ and diff content."
           (ht-set! entry :content (substring line 1)))
          (t
           (ht-set! entry :type :context)
-          (ht-set! entry :content line)))
+          (ht-set! entry :content (if (> (length line) 0)
+                                      (substring line 1)
+                                    ""))))
         (push entry result)))
     (nreverse result)))
 
@@ -204,7 +206,6 @@ parsed diff content."
   "Format LEFT and RIGHT content with given widths (LEFT-WIDTH,RIGHT-WIDTH) and SEPARATOR."
   (-let* [((&hash :content left-content :type left-type) left)
           ((&hash :content right-content :type right-type) right)
-          ;; XXX: Some bug about the indentation lurking here
           (left-formatted (jujutsu-diff--pad-string left-content left-width))
           (right-formatted (jujutsu-diff--pad-string right-content right-width))
           (is-context (and (eq left-type :context) (eq right-type :context)))]
