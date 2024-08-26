@@ -23,6 +23,8 @@
 (require 'dash)
 (require 'dash-x)
 
+(require 'jujutsu-vars)
+
 (defun jujutsu-core--find-project-root ()
   "Find the root directory of the Jujutsu project."
   (locate-dominating-file default-directory ".jj"))

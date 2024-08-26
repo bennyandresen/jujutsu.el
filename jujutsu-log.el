@@ -23,12 +23,8 @@
 (require 's)
 
 (require 'jujutsu-core)
+(require 'jujutsu-vars)
 (require 'jujutsu-formatting)
-
-(defcustom jujutsu-log-revset-fallback "@ | ancestors(immutable_heads().., 2) | trunk()"
-  "Default value when no revset is specified."
-  :group 'jujutsu
-  :type 'string)
 
 (defun jujutsu-log--get-log-entries (&optional revset)
   "Get status data for the given REVSET."
