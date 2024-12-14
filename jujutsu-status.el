@@ -112,9 +112,9 @@ Returns a formatted string with appropriate text properties."
                                 (:hunks-headers '("@@ -151,7 +162,8 @@"
                                                   "@@ -22,6 +22,17 @@"))))
  (jujutsu-status--format-file-change-header (ht-merge jj--crude-test-props (ht (:expanded nil))))
- := "M jujutsu-diff.el\n"
+ := " M jujutsu-diff.el\n"
  (jujutsu-status--format-file-change-header (ht-merge jj--crude-test-props (ht (:expanded t))))
- := "M jujutsu-diff.el\n@@ -151,7 +162,8 @@\n@@ -22,6 +22,17 @@\n")
+ := " M jujutsu-diff.el\n@@ -151,7 +162,8 @@\n@@ -22,6 +22,17 @@\n")
 
 (defun jujutsu-status--format-file-change-diff-hunk-header (props)
   "Format a single file change based on the PROPS."

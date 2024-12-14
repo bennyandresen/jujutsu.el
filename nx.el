@@ -313,11 +313,11 @@ WARNING: Uses unsafe hash-set! operations to achieve its goal."
                (ht-set! node :props new-props))))
 
           (:replace
-           (let* ((old-node (ht-get node-map node-id))
+           (let* ((old-node (ht-get node-map ref-id))
                   (parent (nx--find-parent new-tree old-node)))
              (when parent
                (let ((new-children (mapcar (lambda (child)
-                                             (if (equal (nx-id child) node-id)
+                                             (if (equal (nx-id child) ref-id)
                                                  (nx-copy node)
                                                child))
                                            (ht-get parent :children))))
