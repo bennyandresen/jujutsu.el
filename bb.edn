@@ -1,0 +1,14 @@
+{:tasks 
+ {:requires ([babashka.process :as p])
+  
+  test 
+  {:doc "Run tests in batch mode"
+   :task (let [result (p/sh {:out :inherit :err :inherit}
+                            "emacs"
+                            "-Q"
+                            "--batch"
+                            "-L" (str (System/getenv "DEVENV_PROFILE") "/share/emacs/site-lisp/elpa/")
+                            "-l" "dev.el"
+                            "-l" "nx-test.el"
+                            "-f" "ert-run-tests-batch-and-exit")]
+           (System/exit (:exit result)))}}}
