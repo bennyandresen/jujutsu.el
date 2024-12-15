@@ -12,7 +12,6 @@
          (cl-every #'nx-test-equal a b)))
    (t (equal a b))))
 
-
 (ert-deftest test-nx-diff-trees-and-apply-diff-prop-change ()
   "Test nx-diff-trees and nx-apply-diff with a property change."
   (let* ((tree1 (nx :root (ht (:_nx/id 'root)) (list (nx :child (ht (:_nx/id 'child) (:prop "value"))))))

@@ -379,11 +379,14 @@ RENDER-FN should take a node and return a string representation."
                   :state state)
            state-and-ops)
           (node-map (nx--build-node-map state))]
-    (-comment
-     (jujutsu-dev-dump-tree (ht (:diff-ops diff-ops))
-                            "*jj buffer apply diff*"))
     (with-current-buffer buffer
       (save-excursion
+        (-comment
+         (jujutsu-dev-dump-display (ht
+                                    (:length-dops (length diff-ops))
+                                    (:nmap node-map)
+                                    (:dops diff-ops))))
+
         (dolist (op diff-ops)
           (-let [(&hash :op op-type
                         :parent-id parent-id
@@ -393,14 +396,17 @@ RENDER-FN should take a node and return a string representation."
                  op]
             ;; TODO: I need to grab the state and find the actual nx-node in that state based on the node-id, ref-id, etc.
             (pcase op-type
-              ;; confirmed to work
+              ;; confirmed to work for the simple case
+              ;; XXX: harvest potential children
               (:remove (nx--buffer-delete-region buffer ref-id))
 
               ;; not yet confirmed
+              ;; XXX: harvest potential children
               (:replace (nx--buffer-replace-region buffer ref-id new-node render-fn))
 
               ;; functionally :update does the same as :replace
-              ;; confirmed to work
+              ;; confirmed to work for the simple case
+              ;; XXX: harvest potential children
               (:update-props (nx--buffer-replace-region buffer ref-id (ht-merge (ht-get node-map ref-id) (ht (:props new-props))) render-fn))
 
               ;; confirmed to work
@@ -471,8 +477,12 @@ Returns hash table with :nx/id, :beg, and :end if position has nx/id property."
     (let* ((inhibit-read-only t)
            (buf-map (nx--buffer-id-map (current-buffer)))
            (parent-id (nx-id parent))
+           (node-id (nx-id node))
            (ids-to-search (-concat (list parent-id)
                                    (->> parent nx-children (-map #'nx-id) nreverse))))
+      ;; XXX: if the node is already present, skip search and replace
+      (if (ht-get buf-map node-id)
+          (nx--buffer-replace-region buffer node-id node render-fn))
       (catch 'found
         (dolist (id ids-to-search)
           (when-let* ((pos-bounds (ht-get buf-map id))
