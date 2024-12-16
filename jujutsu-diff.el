@@ -78,12 +78,11 @@ and diff content."
     result))
 
 (-tests
- (--> "resources/test-diff-git.output"
-      -slurp
-      jujutsu-diff--split-git-diff-by-file
-      jujutsu-diff--parse-diffs
-      (ht-get it "jujutsu.el")
-      (ht-get it :metadata))
+ (-> "resources/test-diff-git.output"
+     -slurp
+     jujutsu-diff--split-git-diff-by-file
+     jujutsu-diff--parse-diffs
+     (ht-get* "jujutsu.el" :metadata))
  :=
  '("index 5b32d77748...1aa38bdebf 100644"
    "--- a/jujutsu.el"
@@ -136,7 +135,7 @@ and diff content."
     (nreverse result)))
 
 (-tests
- (-->
+ (->
   "        (s-split \"\\n\" it t)))
 
  (defun jj--map-to-escaped-string (map)
@@ -147,11 +146,10 @@ and diff content."
                   (format \"\\\"%s \\\" ++ %s ++ \\\"\\\\n\\\"\"
 "
   jujutsu-diff--parse-diff-hunk
-  (nth 0 it)
   ;; because of ht-equality specialness just a single map is checked.
-  (ht-equal? it
-             (ht (:type :context)
-                 (:content "        (s-split \"\\n\" it t)))"))))
+  car
+  (ht-equal? (ht (:content "       (s-split \"\\n\" it t)))")
+                 (:type :context))))
  := t)
 
 (defun jujutsu-diff--parse-hunks (hunks)

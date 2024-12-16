@@ -25,6 +25,12 @@
 
 (require 'jujutsu-vars)
 
+(defun jujutsu-core--template-list (s)
+  "Format string S as a semicolon-joined list in jujutsu template syntax.
+Wraps S with .join(\";\") for use in jujutsu templates where multiple
+values need to be concatenated into a single string."
+  (s-concat s ".join(\\\";\\\")"))
+
 (defun jujutsu-core--find-project-root ()
   "Find the root directory of the Jujutsu project."
   (locate-dominating-file default-directory ".jj"))
@@ -64,7 +70,6 @@ template and revision, returning the command's output as a string."
          (formatted (format "show --summary --template \"%s\" %s"
                             template
                             rev)))
-    (setq foo-template template)
     (jujutsu-core--run-command formatted)))
 
 (defun jujutsu-core--log-w/template (template &optional revset)
@@ -90,7 +95,7 @@ the command's output as a string, with each log entry separated by newlines."
 (defun jujutsu-core--map-to-escaped-string (map)
   "Convert MAP (hash-table) to an escaped string for use as a jj template."
   (let ((k->s (lambda (k) (if (keywordp k)
-                              (intern (substring (symbol-name k) 1))
+                              (intern (s-replace "$" "\\$" (substring (symbol-name k) 1)))
                             k))))
     (->> map
          (ht-map (lambda (key value)
@@ -100,6 +105,7 @@ the command's output as a string, with each log entry separated by newlines."
 
 (-tests
  (let ((m (ht (:foo nil)
+              (:foo$bool "hello world")
               (:bar 1))))
    (jujutsu-core--map-to-escaped-string m))
  :=
@@ -124,9 +130,12 @@ If the key contains `:list', the value is split based on `;'."
                               eos))
                    ((res m1 m2) (s-match regex line))]
         (let* ((key (funcall s->kw m1))
-               (value (if (and m2 (s-contains? ":list" (symbol-name key)))
-                          (s-split ";" m2 t)
-                        m2)))
+               (value (cond
+                       ((s-ends-with? "$list" (symbol-name key))
+                        (s-split ";" m2 t))
+                       ((s-ends-with? "$bool" (symbol-name key))
+                        (s-equals? m2 "true"))
+                       (t m2))))
           (ht (key value)))))))
 
 (-comment
@@ -135,17 +144,24 @@ If the key contains `:list', the value is split based on `;'."
  ;; => #s(hash-table ... (:commit-id "abc123"))
 
  ;; List key-value pair
- (jujutsu-core--parse-key-value "bookmarks:list main;feature-1;hotfix")
- ;; => #s(hash-table ... (:bookmarks-list ("main" "feature-1" "hotfix")))
+ (jujutsu-core--parse-key-value "bookmarks$list main;feature-1;hotfix")
+ ;; => #s(hash-table ... (:bookmarks$list ("main" "feature-1" "hotfix")))
 
- ;; Key with "list:" but no semicolons
- (jujutsu-core--parse-key-value "files:list file1.txt")
- ;; => #s(hash-table ... (:files-list ("file1.txt")))
+ ;; Key with "$list" but no semicolons
+ (jujutsu-core--parse-key-value "files$list file1.txt")
+ ;; => #s(hash-table ... (:files$list ("file1.txt")))
 
  ;; Regular key with semicolons (not treated as a list)
  (jujutsu-core--parse-key-value "description Some; text; here")
  ;; => #s(hash-table ... (:description "Some; text; here"))
- )
+
+ ;; Boolean key-value pair
+ (jujutsu-core--parse-key-value "empty$bool true")
+ ;; => #s(hash-table ... (:empty$bool t))
+ (jujutsu-core--parse-key-value "empty$bool false")
+ ;; => #s(hash-table ... (:empty$bool nil))
+
+ ,)
 
 (defun jujutsu-core--parse-and-group-file-changes (file-changes)
   "Parse and group FILE-CHANGES by their change type into a hash-table."
@@ -183,16 +199,16 @@ If the key contains `:list', the value is split based on `;'."
                       (:change-id-shortest "change_id.shortest()")
                       (:commit-id-short "commit_id.short(8)")
                       (:commit-id-shortest "commit_id.shortest()")
-                      (:empty "empty")
-                      (:bookmarks "bookmarks")
-                      (:git-head "git_head")
+                      (:empty$bool "empty")
+                      (:bookmarks$list (jujutsu-core--template-list "bookmarks"))
+                      (:git-head$bool "git_head")
                       (:description "description.first_line()"))))
     (-> (jujutsu-core--map-to-escaped-string template)
         (jujutsu-core--show-w/template rev)
         jujutsu-core--parse-string-to-map)))
 
 (-comment
- (jujutsu-core--get-status-data "@")
+ (jujutsu-core--get-status-data "@-")
 
  foo-template
  )

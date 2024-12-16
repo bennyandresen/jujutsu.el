@@ -64,15 +64,15 @@ Returns a formatted string with appropriate text properties."
                   :change-id-shortest chidss
                   :commit-id-short coids
                   :commit-id-shortest coidss
-                  :bookmarks bookmarks
-                  :empty empty
+                  :bookmarks$list bookmarks
+                  :empty$bool empty
                   :description desc)
            data)
-          (empty (if (s-equals? empty "true")
+          (empty (if empty
                      (propertize "(empty) " 'face 'warning)
                    ""))
-          (bookmarks (if bookmarks
-                         (s-concat (propertize bookmarks 'face 'magit-branch-local)
+          (bookmarks (if (> (length bookmarks) 0)
+                         (s-concat (propertize (s-join " " bookmarks) 'face 'magit-branch-local)
                                    " | ")
                        ""))
           (change-id (jujutsu-formatting--format-id chids chidss))
@@ -86,8 +86,7 @@ Returns a formatted string with appropriate text properties."
   "Format a single file change based on the PROPS."
   (-let* [((&hash :type type
                   :filename filename
-                  :expanded expanded
-                  :hunks-headers headers)
+                  :expanded expanded)
            props)
           (change-type (pcase type (:added "A") (:modified "M") (:deleted "D")))
           (face (cond ((string= change-type "A") 'magit-diffstat-added)
@@ -134,7 +133,6 @@ Returns a formatted string with appropriate text properties."
   "Format the diff content passed through via PROPS."
   (-let* [((&hash :content content)
            props)]
-
     (s-join "\n"
             (-concat
              (jujutsu-diff--create-side-by-side-diff content)
@@ -344,7 +342,7 @@ Returns an nx node representing the file change."
 (defun jujutsu-status--make-log-section ()
   "Create the log section of the tree."
   (let* ((lentries (jujutsu-log--get-log-entries jujutsu-log-revset-fallback))
-         (includes-root? (-some (lambda (m) (s-equals? (ht-get m :root) "true")) lentries)))
+         (includes-root? (-some (lambda (m) (ht-get m :root$bool)) lentries)))
     (nx :log-section (ht)
         (-concat
          (list (nx :log-section-header (ht (:text "Log:")
@@ -494,8 +492,7 @@ Returns the updated node or its original state if no update was necessary."
   "Update file change diff hunk header NODE based on ACTION."
   (when (eq action 'toggle)
     (-let* [(props (ht-get node :props))
-            ((&hash :header header
-                    :contents contents)
+            ((&hash :contents contents)
              props)
             (expanded-fut (not (ht-get props :expanded)))]
       (ht-set props :expanded expanded-fut)
@@ -535,7 +532,8 @@ ACTION is the user action to apply."
         (funcall handler node action)
       node)) ; Return the node unchanged if no handler is found
   (when (bound-and-true-p jujutsu-dev-dump-user-actions)
-    (jujutsu-dev-dump-tree node))
+    (jujutsu-dev-dump-display (ht (:action action)
+                                  (:node node))))
   node)
 
 (defun jujutsu-status--update-tree (tree dom-id action)
@@ -584,7 +582,7 @@ This provides a comprehensive overview of your repository's current state."
         (setq-local jujutsu-status-app-state (jujutsu-status--make-tree))
         (setq-local jujutsu-status-previous-state nil)
         ;; ^ Initialize previous state
-        (jujutsu-status-render2))
+        (jujutsu-status-render))
       (goto-char (point-min))
       (setq-local jujutsu-status-current-dom-id nil)
       ;; XXX: not nice
@@ -601,7 +599,7 @@ This provides a comprehensive overview of your repository's current state."
     ('toggle (jujutsu-status-dispatch 'toggle))
     ('refresh (jujutsu-status))))
 
-(defun jujutsu-status-render ()
+(defun jujutsu-status-render--from-scratch ()
   "Render the current application state from scratch."
   (let ((inhibit-read-only t)
         (new-state jujutsu-status-app-state))
@@ -609,7 +607,7 @@ This provides a comprehensive overview of your repository's current state."
     (insert (jujutsu-status--render-tree jujutsu-status-app-state))
     (setq jujutsu-status-previous-state new-state)))
 
-(defun jujutsu-status-render2 ()
+(defun jujutsu-status-render--buffer-reconciliation ()
   "Render the current application state using the diffing algorithm."
   (let* ((inhibit-read-only t)
          (old-state (if (eq jujutsu-status-previous-state nil)
@@ -625,11 +623,13 @@ This provides a comprehensive overview of your repository's current state."
                           #'jujutsu-status--render-node)
     (setq jujutsu-status-previous-state new-state)))
 
+(defalias 'jujutsu-status-render (symbol-function 'jujutsu-status-render-from-scratch))
+
 (defun jujutsu-status-update-state (updater)
   "Update the application state using UPDATER function."
   (let ((new-state (funcall updater jujutsu-status-app-state)))
     (setq jujutsu-status-app-state new-state)
-    (jujutsu-status-render2)))
+    (jujutsu-status-render)))
 
 ;; Dispatch function for user actions
 (defun jujutsu-status-dispatch (action)

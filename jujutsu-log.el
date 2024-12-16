@@ -34,17 +34,17 @@
                       (:change-id-shortest "change_id.shortest()")
                       (:commit-id-short "commit_id.short(8)")
                       (:commit-id-shortest "commit_id.shortest()")
-                      (:empty "empty")
-                      (:bookmarks "bookmarks")
-                      (:hidden "hidden")
+                      (:empty$bool "empty")
+                      (:bookmarks$list (jujutsu-core--template-list "bookmarks"))
+                      (:hidden$bool "hidden")
                       (:author-email "author.email()")
                       (:timestamp "author.timestamp().format(\\\"%Y-%m-%d %H:%M:%S\\\")")
-                      (:current-working-copy "current_working_copy")
-                      (:remote-bookmarks "remote_bookmarks")
-                      (:git-head "git_head")
-                      (:root "root")
-                      (:immutable "immutable")
-                      (:parents:list "parents.map(|c| c.change_id()).join(\\\";\\\")")
+                      (:current-working-copy$bool "current_working_copy")
+                      (:remote-bookmarks$list (jujutsu-core--template-list "remote_bookmarks"))
+                      (:git-head$bool "git_head")
+                      (:root$bool "root")
+                      (:immutable$bool "immutable")
+                      (:parents$list (jujutsu-core--template-list "parents.map(|c| c.change_id())"))
                       (:description "description.first_line()"))))
     (--> (jujutsu-core--map-to-escaped-string template)
          (jujutsu-core--log-w/template it revset)
@@ -53,7 +53,10 @@
 
 (-comment
 
- (jujutsu-log--get-log-entries)
+ (-> "@ | ancestors(immutable_heads().., 18) | trunk()"
+     jujutsu-log--get-log-entries
+     jujutsu-dev-dump)
+
 
  )
 
@@ -61,26 +64,23 @@
   "Format a status entry using DATA with fontification."
   (-let* [((&hash :change-id-short chids :change-id-shortest chidss
                   :commit-id-short coids :commit-id-shortest coidss
-                  :bookmarks bookmarks :empty empty :description desc
-                  :root root :author-email author-email
-                  :timestamp timestamp :immutable immutable
-                  :current-working-copy cwc)
+                  :bookmarks$list bookmarks :empty$bool empty :description desc
+                  :root$bool root :author-email author-email
+                  :timestamp timestamp :immutable$bool immutable
+                  :current-working-copy$bool cwc)
            data)
-          (node (cond ((s-equals? cwc "true")
-                       (propertize "@" 'face 'magit-keyword))
-                      ((s-equals? immutable "true")
-                       (propertize "◆" 'face 'magit-log-date))
-                      (t
-                       "○")))
+          (node (cond (cwc (propertize "@" 'face 'magit-keyword))
+                      (immutable (propertize "◆" 'face 'magit-log-date))
+                      (t "○")))
           (author-email (if author-email
                             (propertize author-email 'face 'warning)
                           ""))
-          (root (if (s-equals? root "true") t nil))
-          (empty (if (s-equals? empty "true")
+          (empty (if empty
                      (propertize "(empty) " 'face 'warning)
                    ""))
           (timestamp (if timestamp (propertize timestamp 'face 'magit-log-date)
                        ""))
+          (bookmarks (s-join " " bookmarks))
           (bookmarks (if bookmarks
                          (s-concat (propertize bookmarks 'face 'magit-branch-local) " ")
                        ""))
